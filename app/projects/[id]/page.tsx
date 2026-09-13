@@ -1,0 +1,575 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { AppShell } from '@/components/layout/AppShell';
+import { useDataStore } from '@/lib/data/store';
+import { useAuth } from '@/lib/auth/authContext';
+import {
+  FolderKanban,
+  ArrowLeft,
+  Calendar,
+  MapPin,
+  Building2,
+  Receipt,
+  CreditCard,
+  Wrench,
+  UserCheck,
+  Plus,
+  Trash2,
+  Edit2,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+} from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Modal } from '@/components/ui/Modal';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { ProjectStatus } from '@/types';
+
+export default function ProjectDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+
+  const { isFounder, isSupervisor, user } = useAuth();
+  const {
+    projects,
+    clients,
+    invoices,
+    expenses,
+    tools,
+    attendance,
+    workers,
+    users,
+    projectSupervisors,
+    updateProject,
+    deleteProject,
+  } = useDataStore();
+
+  const project = projects.find((p) => p.id === id);
+  const client = clients.find((c) => c.id === project?.client_id);
+  const projInvoices = invoices.filter((i) => i.project_id === id);
+  const projExpenses = expenses.filter((e) => e.project_id === id);
+  const projTools = tools.filter((t) => t.project_id === id);
+  const projAttendance = attendance.filter((a) => a.project_id === id);
+
+  // Assigned supervisors
+  const assignedSupervisorIds = projectSupervisors
+    .filter((ps) => ps.project_id === id)
+    .map((ps) => ps.supervisor_id);
+  const assignedSupervisors = users.filter((u) => assignedSupervisorIds.includes(u.id));
+
+  const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'expenses' | 'tools' | 'attendance'>('overview');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: project?.name || '',
+    location: project?.location || '',
+    budget_estimate: project?.budget_estimate ? String(project.budget_estimate) : '',
+    status: (project?.status || 'active') as ProjectStatus,
+    start_date: project?.start_date || '',
+    target_completion_date: project?.target_completion_date || '',
+  });
+
+  if (!project) {
+    return (
+      <AppShell>
+        <div className="p-8 text-center space-y-4">
+          <p className="text-navy font-bold">Project not found</p>
+          <Link href="/projects">
+            <Button variant="secondary">Back to Projects</Button>
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const formatPHP = (amount: number) =>
+    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const totalInvoiced = projInvoices.reduce((sum, i) => sum + Number(i.amount || 0), 0);
+  const totalCollected = projInvoices.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+  const totalExpenses = projExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const budgetConsumedPercent = Math.round((totalExpenses / (project.budget_estimate || 1)) * 100);
+
+  const handleUpdate = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateProject(id, {
+      name: editFormData.name,
+      location: editFormData.location,
+      budget_estimate: parseFloat(editFormData.budget_estimate),
+      status: editFormData.status,
+      start_date: editFormData.start_date,
+      target_completion_date: editFormData.target_completion_date,
+    });
+    setIsEditModalOpen(false);
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Are you sure you want to remove ${project.name}?`)) {
+      deleteProject(id);
+      router.push('/projects');
+    }
+  };
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        {/* Navigation & Header */}
+        <div>
+          <Link
+            href="/projects"
+            className="inline-flex items-center space-x-2 text-xs font-semibold text-ink-secondary hover:text-navy transition-colors mb-3"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Projects</span>
+          </Link>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-border/60">
+            <div>
+              <div className="flex items-center space-x-2">
+                <Badge variant={project.status === 'active' ? 'success' : 'navy'} size="sm">
+                  {project.status.toUpperCase()}
+                </Badge>
+                <span className="text-xs text-ink-secondary">Client: {client?.name}</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-navy tracking-tight mt-1.5">
+                {project.name}
+              </h1>
+              <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-ink-secondary">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-navy" />
+                  {project.location}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-navy" />
+                  {project.start_date} to {project.target_completion_date}
+                </span>
+              </div>
+            </div>
+
+            {isFounder && (
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setEditFormData({
+                      name: project.name,
+                      location: project.location,
+                      budget_estimate: String(project.budget_estimate),
+                      status: project.status,
+                      start_date: project.start_date,
+                      target_completion_date: project.target_completion_date,
+                    });
+                    setIsEditModalOpen(true);
+                  }}
+                  leftIcon={<Edit2 className="w-3.5 h-3.5" />}
+                >
+                  Edit Project
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDelete} className="text-rose-700 hover:bg-rose-50">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b border-surface-border/80 space-x-2 overflow-x-auto">
+          {[
+            { id: 'overview', label: 'Overview & Summary' },
+            ...(isFounder ? [{ id: 'invoices', label: `Invoices (${projInvoices.length})` }] : []),
+            ...(isFounder ? [{ id: 'expenses', label: `Expenses (${projExpenses.length})` }] : []),
+            { id: 'tools', label: `Site Tools (${projTools.length})` },
+            { id: 'attendance', label: `Workforce Logs (${projAttendance.length})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-all border-b-2 ${
+                activeTab === tab.id
+                  ? 'border-navy text-navy'
+                  : 'border-transparent text-ink-secondary hover:text-navy'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB 1: OVERVIEW */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Financial summary metrics (Founder only) */}
+            {isFounder && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
+                  <div className="text-xs font-semibold text-ink-secondary uppercase">Budget Estimate</div>
+                  <div className="text-xl font-bold text-navy mt-1">{formatPHP(project.budget_estimate)}</div>
+                  <div className="text-[11px] text-ink-muted mt-0.5">Contract Total</div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
+                  <div className="text-xs font-semibold text-ink-secondary uppercase">Progress Invoiced</div>
+                  <div className="text-xl font-bold text-navy mt-1">{formatPHP(totalInvoiced)}</div>
+                  <div className="text-[11px] text-emerald-700 mt-0.5">{formatPHP(totalCollected)} Collected</div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
+                  <div className="text-xs font-semibold text-ink-secondary uppercase">Site Expenses</div>
+                  <div className="text-xl font-bold text-navy mt-1">{formatPHP(totalExpenses)}</div>
+                  <div className="text-[11px] text-ink-secondary mt-0.5">{budgetConsumedPercent}% of Budget</div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
+                  <div className="text-xs font-semibold text-ink-secondary uppercase">Net Collected Margin</div>
+                  <div className="text-xl font-bold text-emerald-800 mt-1">
+                    {formatPHP(Math.max(0, totalCollected - totalExpenses))}
+                  </div>
+                  <div className="text-[11px] text-ink-secondary mt-0.5">Realized cash margin</div>
+                </div>
+              </div>
+            )}
+
+            {/* Project Site Details */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Site & Client Specifications</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-surface-border/60">
+                    <span className="text-ink-secondary">Client Name:</span>
+                    <span className="font-bold text-navy">{client?.name}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-surface-border/60">
+                    <span className="text-ink-secondary">Contact Person:</span>
+                    <span className="font-medium text-navy">{client?.contact_person}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-surface-border/60">
+                    <span className="text-ink-secondary">Phone Number:</span>
+                    <span className="font-medium text-navy">{client?.phone}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-surface-border/60">
+                    <span className="text-ink-secondary">Client Email:</span>
+                    <span className="font-medium text-navy">{client?.email}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5">
+                    <span className="text-ink-secondary">Site Address:</span>
+                    <span className="font-medium text-navy text-right max-w-[60%]">{project.location}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Assigned Supervisors */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Assigned Site Supervisors</CardTitle>
+                  <CardDescription>Authorized supervisors recording attendance for this project</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {assignedSupervisors.length > 0 ? (
+                      assignedSupervisors.map((sup) => (
+                        <div
+                          key={sup.id}
+                          className="p-3 rounded-xl bg-surface-inset border border-surface-border flex items-center justify-between"
+                        >
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-full bg-navy text-white flex items-center justify-center font-bold text-xs">
+                              {sup.name[0]}
+                            </div>
+                            <div>
+                              <div className="font-bold text-xs text-navy">{sup.name}</div>
+                              <div className="text-[10px] text-ink-secondary">{sup.email}</div>
+                            </div>
+                          </div>
+                          <Badge variant="warning" size="sm">
+                            Supervisor
+                          </Badge>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-xs text-ink-secondary italic p-4 text-center">
+                        No supervisor specifically assigned yet. Founders manage attendance by default.
+                      </div>
+                    )}
+
+                    <div className="pt-3">
+                      <Link href="/attendance">
+                        <Button variant="secondary" size="sm" className="w-full">
+                          Open Attendance Terminal for this Site
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: INVOICES (Founder only) */}
+        {activeTab === 'invoices' && isFounder && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-sm">Project Milestone Invoices</h3>
+              <Link href="/invoices">
+                <Button variant="primary" size="sm" leftIcon={<Plus className="w-3.5 h-3.5" />}>
+                  Create Invoice
+                </Button>
+              </Link>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-surface-border overflow-hidden shadow-sm">
+              <div className="divide-y divide-surface-border/70">
+                {projInvoices.length > 0 ? (
+                  projInvoices.map((inv) => (
+                    <div key={inv.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-sm text-navy font-mono">{inv.invoice_number}</div>
+                        <div className="text-xs text-ink-secondary mt-0.5">{inv.notes}</div>
+                        <div className="text-[11px] text-ink-muted mt-1">Due Date: {inv.due_date}</div>
+                      </div>
+                      <div className="flex items-center space-x-4 text-right">
+                        <div>
+                          <div className="text-sm font-bold text-navy">{formatPHP(inv.amount)}</div>
+                          <div className="text-xs text-emerald-800 font-medium">
+                            Paid: {formatPHP(inv.amount_paid)}
+                          </div>
+                        </div>
+                        <Badge
+                          variant={
+                            inv.status === 'paid'
+                              ? 'success'
+                              : inv.status === 'overdue'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                          size="sm"
+                        >
+                          {inv.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 text-center text-xs text-ink-secondary">
+                    No invoices generated yet for this project.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: EXPENSES (Founder only) */}
+        {activeTab === 'expenses' && isFounder && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-sm">Site Disbursements & Cost Ledger</h3>
+              <Link href="/expenses">
+                <Button variant="primary" size="sm" leftIcon={<Sparkles className="w-3.5 h-3.5" />}>
+                  Record Expense
+                </Button>
+              </Link>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-surface-border overflow-hidden shadow-sm">
+              <div className="divide-y divide-surface-border/70">
+                {projExpenses.length > 0 ? (
+                  projExpenses.map((exp) => (
+                    <div key={exp.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-xs sm:text-sm text-navy">{exp.description}</div>
+                        <div className="text-xs text-ink-secondary mt-0.5 capitalize">
+                          Category: {exp.category} · Date: {exp.expense_date}
+                        </div>
+                        {exp.notes && <div className="text-[11px] text-ink-muted mt-0.5">{exp.notes}</div>}
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-navy">{formatPHP(exp.amount)}</div>
+                        <Badge variant="navy" size="sm" className="mt-1">
+                          Confirmed
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 text-center text-xs text-ink-secondary">
+                    No site expenses recorded yet for this project.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: TOOLS */}
+        {activeTab === 'tools' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-sm">Tools Allocated to This Site</h3>
+              {isFounder && (
+                <Link href="/tools">
+                  <Button variant="secondary" size="sm">Manage Tools</Button>
+                </Link>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {projTools.length > 0 ? (
+                projTools.map((tool) => (
+                  <div key={tool.id} className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="w-8 h-8 rounded-xl bg-surface-inset text-navy flex items-center justify-center">
+                        <Wrench className="w-4 h-4" />
+                      </div>
+                      <Badge variant={tool.condition === 'excellent' ? 'success' : 'warning'} size="sm">
+                        {tool.condition}
+                      </Badge>
+                    </div>
+                    <div className="font-bold text-xs text-navy mt-2">{tool.name}</div>
+                    <div className="text-xs text-ink-secondary">Quantity: {tool.quantity} unit(s)</div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full p-8 text-center bg-white rounded-2xl border border-surface-border text-xs text-ink-secondary">
+                  No heavy machinery or special tools logged on this site.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: ATTENDANCE */}
+        {activeTab === 'attendance' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-sm">Site Attendance Logs</h3>
+              <Link href="/attendance">
+                <Button variant="primary" size="sm" leftIcon={<UserCheck className="w-3.5 h-3.5" />}>
+                  Go to Attendance Terminal
+                </Button>
+              </Link>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-surface-border overflow-hidden shadow-sm">
+              <div className="divide-y divide-surface-border/70">
+                {projAttendance.length > 0 ? (
+                  projAttendance.map((att) => {
+                    const worker = workers.find((w) => w.id === att.worker_id);
+                    return (
+                      <div key={att.id} className="p-4 flex items-center justify-between gap-3 text-xs">
+                        <div>
+                          <div className="font-bold text-navy">{worker?.name || 'Worker'}</div>
+                          <div className="text-ink-secondary">{worker?.position} · Date: {att.date}</div>
+                          {att.notes && <div className="text-[11px] text-ink-muted mt-0.5">{att.notes}</div>}
+                        </div>
+                        <div className="flex items-center space-x-3 text-right">
+                          <span className="font-semibold text-navy">{att.hours_worked} hrs</span>
+                          <Badge
+                            variant={
+                              att.status === 'present'
+                                ? 'success'
+                                : att.status === 'half_day'
+                                ? 'warning'
+                                : 'danger'
+                            }
+                            size="sm"
+                          >
+                            {att.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-xs text-ink-secondary">
+                    No attendance logs for this site yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Edit Modal (Founder only) */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        title="Edit Project Details"
+        description="Update project milestones and budget allocation."
+      >
+        <form onSubmit={handleUpdate} className="space-y-4 text-xs">
+          <Input
+            label="Project Name"
+            value={editFormData.name}
+            onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+            required
+          />
+
+          <Input
+            label="Location"
+            value={editFormData.location}
+            onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+            required
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Budget Estimate"
+              type="number"
+              value={editFormData.budget_estimate}
+              onChange={(e) => setEditFormData({ ...editFormData, budget_estimate: e.target.value })}
+              required
+            />
+
+            <Select
+              label="Status"
+              value={editFormData.status}
+              onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as ProjectStatus })}
+            >
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Start Date"
+              type="date"
+              value={editFormData.start_date}
+              onChange={(e) => setEditFormData({ ...editFormData, start_date: e.target.value })}
+            />
+            <Input
+              label="Target Completion Date"
+              type="date"
+              value={editFormData.target_completion_date}
+              onChange={(e) => setEditFormData({ ...editFormData, target_completion_date: e.target.value })}
+            />
+          </div>
+
+          <div className="pt-3 flex justify-end space-x-2">
+            <Button variant="secondary" onClick={() => setIsEditModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit">
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </AppShell>
+  );
+}
