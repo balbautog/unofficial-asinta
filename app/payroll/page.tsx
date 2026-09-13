@@ -1,0 +1,416 @@
+'use client';
+
+import React, { useState } from 'react';
+import { AppShell } from '@/components/layout/AppShell';
+import { useDataStore } from '@/lib/data/store';
+import { useAuth } from '@/lib/auth/authContext';
+import { Payroll, PayrollStatus } from '@/types';
+import {
+  Banknote,
+  Plus,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  Printer,
+  FileText,
+  Calendar,
+  HandCoins,
+  DollarSign,
+  ArrowRight,
+  ShieldCheck,
+  Check,
+} from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
+import { Modal } from '@/components/ui/Modal';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+
+export default function PayrollPage() {
+  const { isFounder } = useAuth();
+  const {
+    payroll,
+    workers,
+    advances,
+    createPayrollRun,
+    updatePayrollStatus,
+  } = useDataStore();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Modals
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
+  const [isPayslipModalOpen, setIsPayslipModalOpen] = useState(false);
+  const [selectedPayroll, setSelectedPayroll] = useState<Payroll | null>(null);
+
+  // Generate run state
+  const [periodStart, setPeriodStart] = useState('2026-09-08');
+  const [periodEnd, setPeriodEnd] = useState('2026-09-14');
+
+  const formatPHP = (amount: number) =>
+    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
+  const filteredPayroll = payroll.filter((p) => {
+    const worker = workers.find((w) => w.id === p.worker_id);
+    const matchesSearch =
+      worker?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      worker?.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.notes && p.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalNetDisbursement = filteredPayroll.reduce((sum, p) => sum + Number(p.net_pay || 0), 0);
+  const totalBaleRecovered = filteredPayroll.reduce((sum, p) => sum + Number(p.bale_deduction || 0), 0);
+
+  const handleGenerateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createPayrollRun(periodStart, periodEnd);
+    setIsGenerateModalOpen(false);
+  };
+
+  return (
+    <AppShell requireFounder={true}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-surface-border/60">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-navy uppercase tracking-widest">
+                Manpower Compensation
+              </span>
+              <span className="text-xs text-ink-muted">·</span>
+              <span className="text-xs text-ink-secondary">Bale Integrated</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-navy tracking-tight mt-1">
+              Automated Payroll Engine
+            </h1>
+          </div>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => setIsGenerateModalOpen(true)}
+            leftIcon={<Plus className="w-4 h-4" />}
+          >
+            Compute New Period Run
+          </Button>
+        </div>
+
+        {/* Top Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
+            <div className="text-xs font-semibold text-ink-secondary uppercase">Total Net Payroll</div>
+            <div className="text-2xl font-bold text-navy mt-1">{formatPHP(totalNetDisbursement)}</div>
+            <div className="text-[11px] text-ink-muted mt-0.5">Net cash disbursement required</div>
+          </div>
+
+          <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
+            <div className="text-xs font-semibold text-ink-secondary uppercase">Bale Deductions Recovered</div>
+            <div className="text-2xl font-bold text-emerald-800 mt-1">{formatPHP(totalBaleRecovered)}</div>
+            <div className="text-[11px] text-emerald-700 mt-0.5">Subtracted from worker advances</div>
+          </div>
+
+          <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
+            <div className="text-xs font-semibold text-ink-secondary uppercase">Pending Founder Approval</div>
+            <div className="text-2xl font-bold text-amber-800 mt-1">
+              {payroll.filter((p) => p.status === 'draft' || p.status === 'reviewed').length}
+            </div>
+            <div className="text-[11px] text-amber-700 mt-0.5">Draft payroll vouchers</div>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="w-full sm:w-80">
+            <Input
+              placeholder="Search worker or position..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              leftIcon={<Search className="w-4 h-4" />}
+            />
+          </div>
+
+          <div className="w-full sm:w-48">
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              options={[
+                { label: 'All Statuses', value: 'all' },
+                { label: 'Draft', value: 'draft' },
+                { label: 'Approved', value: 'approved' },
+                { label: 'Paid', value: 'paid' },
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* Payroll Table */}
+        <div className="bg-white rounded-3xl border border-surface-border shadow-[6px_6px_18px_rgba(11,31,58,0.06),-6px_-6px_18px_rgba(255,255,255,0.95)] overflow-hidden">
+          <div className="divide-y divide-surface-border/70">
+            {filteredPayroll.map((pay) => {
+              const worker = workers.find((w) => w.id === pay.worker_id);
+
+              const statusBadgeVariant =
+                pay.status === 'paid'
+                  ? 'success'
+                  : pay.status === 'approved'
+                  ? 'info'
+                  : 'warning';
+
+              return (
+                <div
+                  key={pay.id}
+                  className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-slate-50/60 transition-colors"
+                >
+                  {/* Left: Worker info */}
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-sm text-navy">{worker?.name}</span>
+                      <span className="text-xs text-ink-secondary">({worker?.position})</span>
+                      <Badge variant={statusBadgeVariant} size="sm">
+                        {pay.status}
+                      </Badge>
+                    </div>
+
+                    <div className="text-xs text-ink-secondary">
+                      Period: <span className="font-semibold text-navy">{pay.period_start} → {pay.period_end}</span> · Days: {pay.days_worked || 6} days ({pay.hours_worked || 48}h)
+                    </div>
+
+                    {pay.notes && (
+                      <div className="text-xs text-ink-muted italic">{pay.notes}</div>
+                    )}
+                  </div>
+
+                  {/* Middle: Calculation columns */}
+                  <div className="grid grid-cols-3 gap-4 text-xs py-2 lg:py-0">
+                    <div>
+                      <div className="text-ink-secondary">Gross Wages</div>
+                      <div className="font-bold text-navy text-sm mt-0.5">{formatPHP(pay.gross_pay)}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-ink-secondary">Bale Deduction</div>
+                      <div className={`font-bold text-sm mt-0.5 ${pay.bale_deduction > 0 ? 'text-status-danger' : 'text-slate-400'}`}>
+                        -{formatPHP(pay.bale_deduction)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-ink-secondary font-semibold">Net Pay</div>
+                      <div className="font-extrabold text-navy text-base mt-0.5">{formatPHP(pay.net_pay)}</div>
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="flex items-center flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedPayroll(pay);
+                        setIsPayslipModalOpen(true);
+                      }}
+                      leftIcon={<Printer className="w-3.5 h-3.5" />}
+                    >
+                      Print Payslip
+                    </Button>
+
+                    {pay.status === 'draft' && (
+                      <Button
+                        variant="soft"
+                        size="sm"
+                        onClick={() => updatePayrollStatus(pay.id, 'approved')}
+                        leftIcon={<ShieldCheck className="w-3.5 h-3.5 text-navy" />}
+                      >
+                        Approve
+                      </Button>
+                    )}
+
+                    {pay.status === 'approved' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => updatePayrollStatus(pay.id, 'paid')}
+                        leftIcon={<Check className="w-3.5 h-3.5" />}
+                      >
+                        Mark as Paid
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredPayroll.length === 0 && (
+              <div className="p-12 text-center text-xs text-ink-secondary">
+                No payroll records found matching current criteria.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* GENERATE RUN MODAL */}
+      <Modal
+        isOpen={isGenerateModalOpen}
+        onClose={() => setIsGenerateModalOpen(false)}
+        title="Compute Weekly / Bi-Monthly Payroll"
+        description="Automatically calculates gross pay from attendance and deducts active worker advances (bale)."
+      >
+        <form onSubmit={handleGenerateSubmit} className="space-y-4 text-xs">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Period Start Date"
+              type="date"
+              value={periodStart}
+              onChange={(e) => setPeriodStart(e.target.value)}
+              required
+            />
+            <Input
+              label="Period End Date"
+              type="date"
+              value={periodEnd}
+              onChange={(e) => setPeriodEnd(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-surface-inset border border-surface-border space-y-1.5 text-ink-secondary">
+            <div className="font-bold text-navy text-xs">Automated Engine Logic:</div>
+            <div>1. Aggregates site attendance records within selected date range.</div>
+            <div>2. Multiplies days/hours worked by worker craft daily wage rates.</div>
+            <div>3. Checks active Bale ledger balance and factors in deductible amounts.</div>
+            <div>4. Outputs draft payroll vouchers for Founder final approval.</div>
+          </div>
+
+          <div className="pt-3 flex justify-end space-x-2">
+            <Button variant="secondary" onClick={() => setIsGenerateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit">
+              Generate Payroll Run
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* PRINTABLE PAYSLIP MODAL */}
+      <Modal
+        isOpen={isPayslipModalOpen}
+        onClose={() => setIsPayslipModalOpen(false)}
+        title="Asinta Architects — Official Worker Payslip"
+        description="Printable worker compensation slip and signed acknowledgment."
+        maxWidth="lg"
+      >
+        {selectedPayroll && (() => {
+          const worker = workers.find((w) => w.id === selectedPayroll.worker_id);
+
+          return (
+            <div className="space-y-6">
+              {/* Printable Payslip Card */}
+              <div className="p-6 rounded-2xl bg-white border border-slate-300 font-sans space-y-5 text-ink-primary">
+                {/* Header */}
+                <div className="flex items-start justify-between pb-4 border-b-2 border-navy">
+                  <div>
+                    <div className="text-xl font-black text-navy tracking-tight">ASINTA ARCHITECTS</div>
+                    <div className="text-[10px] uppercase font-semibold text-ink-secondary tracking-widest">
+                      Design · Build · Batangas
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-bold text-navy">WORKER PAYSLIP</div>
+                    <div className="text-[11px] text-ink-secondary">
+                      Period: {selectedPayroll.period_start} to {selectedPayroll.period_end}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Worker Details */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase text-ink-secondary">Worker Name</div>
+                    <div className="font-bold text-navy text-sm mt-0.5">{worker?.name}</div>
+                    <div className="text-ink-secondary">{worker?.position}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase text-ink-secondary">Wage Rate</div>
+                    <div className="font-bold text-navy mt-0.5">₱{worker?.pay_rate} / Day</div>
+                    <div className="text-ink-secondary">Days Worked: {selectedPayroll.days_worked || 6} days</div>
+                  </div>
+                </div>
+
+                {/* Breakdown Table */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 font-bold text-navy uppercase text-[10px] border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5 text-left">Earnings & Deductions</th>
+                        <th className="p-2.5 text-right">Amount (PHP)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      <tr>
+                        <td className="p-2.5">Gross Wages ({selectedPayroll.days_worked || 6} days @ ₱{worker?.pay_rate})</td>
+                        <td className="p-2.5 text-right font-mono font-bold text-navy">{formatPHP(selectedPayroll.gross_pay)}</td>
+                      </tr>
+                      {selectedPayroll.bale_deduction > 0 && (
+                        <tr className="text-status-danger">
+                          <td className="p-2.5">Bale / Cash Advance Deduction</td>
+                          <td className="p-2.5 text-right font-mono font-bold">-{formatPHP(selectedPayroll.bale_deduction)}</td>
+                        </tr>
+                      )}
+                      {selectedPayroll.other_deductions > 0 && (
+                        <tr className="text-status-danger">
+                          <td className="p-2.5">Other Deductions / Tools</td>
+                          <td className="p-2.5 text-right font-mono font-bold">-{formatPHP(selectedPayroll.other_deductions)}</td>
+                        </tr>
+                      )}
+                      <tr className="bg-slate-50/80 font-black text-sm text-navy">
+                        <td className="p-2.5">NET TAKE-HOME PAY</td>
+                        <td className="p-2.5 text-right font-mono text-base">{formatPHP(selectedPayroll.net_pay)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Worker Signature Acknowledgment */}
+                <div className="pt-4 border-t border-slate-200 flex items-end justify-between text-[11px]">
+                  <div>
+                    <div className="text-[10px] text-ink-secondary">Authorized by:</div>
+                    <div className="font-bold text-navy">Ar. Junel Buyagon</div>
+                    <div className="text-[9px] text-ink-muted">Principal Architect</div>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="w-44 border-b border-navy mb-1" />
+                    <div className="text-[10px] font-semibold text-navy">Worker Signature & Date</div>
+                    <div className="text-[9px] text-ink-muted">Received in cash / envelope</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between items-center">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => window.print()}
+                  leftIcon={<Printer className="w-3.5 h-3.5" />}
+                >
+                  Print Payslip
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setIsPayslipModalOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+    </AppShell>
+  );
+}
