@@ -3,29 +3,18 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
 import {
-  MessageSquareText,
   Send,
   Search,
   CheckCircle2,
-  Clock,
-  Phone,
-  Receipt,
-  User,
-  Plus,
-  Radio,
-  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 
 export default function SMSPage() {
-  const { isFounder } = useAuth();
   const { smsLogs, invoices, clients, sendSMS } = useDataStore();
 
   const [searchQuery, setSearchQuery] = useState('');

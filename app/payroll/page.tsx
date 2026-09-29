@@ -3,20 +3,11 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
-import { Payroll, PayrollStatus } from '@/types';
+import { Payroll } from '@/types';
 import {
-  Banknote,
   Plus,
   Search,
-  CheckCircle2,
-  AlertCircle,
   Printer,
-  FileText,
-  Calendar,
-  HandCoins,
-  DollarSign,
-  ArrowRight,
   ShieldCheck,
   Check,
 } from 'lucide-react';
@@ -25,14 +16,11 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 
 export default function PayrollPage() {
-  const { isFounder } = useAuth();
   const {
     payroll,
     workers,
-    advances,
     createPayrollRun,
     updatePayrollStatus,
   } = useDataStore();

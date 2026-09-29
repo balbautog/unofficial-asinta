@@ -6,24 +6,15 @@ import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
 import { useToast } from '@/components/ui/Toast';
 import { createClient } from '@/lib/supabase/client';
-import { Expense, ExpenseCategory } from '@/types';
+import { ExpenseCategory } from '@/types';
 import {
-  CreditCard,
   Plus,
   Search,
   Sparkles,
   CheckCircle2,
-  AlertCircle,
   Camera,
   Image as ImageIcon,
-  FileText,
-  DollarSign,
-  Calendar,
-  Layers,
-  ArrowRight,
-  Eye,
   Check,
-  X,
   Bot,
   Loader2,
 } from 'lucide-react';
@@ -35,12 +26,11 @@ import { Modal } from '@/components/ui/Modal';
 import { AICategorizationResult } from '@/lib/ai/groq';
 
 export default function ExpensesPage() {
-  const { isFounder, user } = useAuth();
+  const { user } = useAuth();
   const {
     expenses,
     projects,
     createExpense,
-    updateExpense,
     createAdvance,
     workers,
   } = useDataStore();
@@ -73,6 +63,7 @@ export default function ExpensesPage() {
 
   // Receipt upload / submission state
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatPHP = (amount: number) =>
@@ -189,6 +180,7 @@ export default function ExpensesPage() {
       });
       setAiResult(null);
       setAiAccepted(false);
+      setReceiptFileName(null);
     }
     setIsSubmitting(false);
   };
@@ -227,6 +219,7 @@ export default function ExpensesPage() {
 
       const { data } = supabase.storage.from('receipts').getPublicUrl(path);
       setFormData((prev) => ({ ...prev, receipt_url: data.publicUrl }));
+      setReceiptFileName(file.name);
       showToast('success', 'Receipt photo uploaded to Supabase Storage.');
     } catch (err: any) {
       console.error('Receipt upload failed:', err);
@@ -236,6 +229,11 @@ export default function ExpensesPage() {
       // Allow re-selecting the same file after a failure.
       e.target.value = '';
     }
+  };
+
+  const handleRemoveReceipt = () => {
+    setFormData((previous) => ({ ...previous, receipt_url: null }));
+    setReceiptFileName(null);
   };
 
   return (
@@ -532,7 +530,7 @@ export default function ExpensesPage() {
                 ) : (
                   <>
                     <Camera className="w-4 h-4" />
-                    <span>{formData.receipt_url ? 'Receipt Attached ✓' : 'Attach Photo'}</span>
+                    <span>{formData.receipt_url ? 'Replace Receipt' : 'Attach Photo'}</span>
                   </>
                 )}
                 <input
@@ -544,6 +542,23 @@ export default function ExpensesPage() {
                   disabled={isUploadingReceipt}
                 />
               </label>
+              {formData.receipt_url && (
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+                  <div className="min-w-0 flex items-center gap-2 text-emerald-800">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span className="truncate text-[11px] font-semibold">
+                      Receipt Attached ✓{receiptFileName ? ` — ${receiptFileName}` : ''}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveReceipt}
+                    className="shrink-0 text-[11px] font-bold text-rose-700 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
