@@ -1,8 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { isSmtpConfigured } from '@/lib/email/mailer';
+import { isGlobalAutomaticRemindersEnabled } from '@/lib/reminders/scheduler';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/**
+ * Authenticated integration-status endpoint.
+ * Returns booleans ONLY — secret values never leave the server.
+ */
 export async function GET() {
   const supabase = createServerSupabaseClient();
   const {
@@ -21,6 +28,8 @@ export async function GET() {
       supabaseConfigured: Boolean(
         process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       ),
+      smtpConfigured: isSmtpConfigured(),
+      automaticRemindersEnabled: isGlobalAutomaticRemindersEnabled(),
     },
     { headers: { 'Cache-Control': 'private, no-store' } }
   );

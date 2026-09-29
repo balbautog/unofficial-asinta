@@ -15,6 +15,7 @@ import {
   Users,
   Wrench,
   MessageSquareText,
+  BellRing,
   UserCog,
   Settings,
   X,
@@ -40,6 +41,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ isOpen, onClose }) => {
     { label: 'Clients Directory', href: '/clients', icon: Users },
     { label: 'Tools & Inventory', href: '/tools', icon: Wrench },
     { label: 'SMS Reminders', href: '/sms', icon: MessageSquareText },
+    { label: 'Reminder Queue', href: '/reminders', icon: BellRing },
     { label: 'Team & Permissions', href: '/users', icon: UserCog },
     { label: 'Firm Settings', href: '/settings', icon: Settings },
   ];

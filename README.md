@@ -29,11 +29,13 @@ localStorage fallbacks.
    - `supabase/migrations/20260913000000_bale_schema.sql` — tables, RLS policies
    - `supabase/migrations/20260913000001_bale_schema_additions.sql` — payroll summary columns + `receipts` storage bucket & policies
    - `supabase/migrations/20260913000002_bale_seed.sql` — demo seed data (idempotent)
+   - `supabase/migrations/20260929000000_communications.sql` — email templates/logs, reminder dispatches, invoice reminder settings, honest SMS statuses
 
 3. **Configure the environment**:
    ```bash
    cp .env.example .env.local
    # fill in NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+   # plus the SMTP / PhilSMS / cron variables described in the guide below
    ```
 
 4. **Run**:
@@ -41,7 +43,22 @@ localStorage fallbacks.
    npm install
    npm run dev     # http://localhost:3000
    npm run build   # production build
+   npm test        # unit tests (vitest)
    ```
+
+## 📬 Communications setup (email, SMS, automatic reminders)
+
+**See the full administrator guide: [`docs/COMMUNICATIONS_SETUP.md`](docs/COMMUNICATIONS_SETUP.md).**
+
+It covers SMTP provider setup (Gmail, Microsoft 365, Zoho, Amazon SES,
+cPanel), environment variables, DNS/sender verification (SPF/DKIM/DMARC),
+PhilSMS configuration, the secure `/api/cron/reminders` scheduler, the staged
+activation checklist for automatic SMS reminders (disabled by default),
+troubleshooting, and the emergency-disable procedure.
+
+Sign-in note: the unified role-aware login now lives at `/` — legacy
+`/login`, `/login/admin`, and `/login/supervisor` URLs permanently redirect
+there.
 
 ## Seeded demo accounts
 

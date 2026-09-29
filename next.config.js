@@ -2,9 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   async redirects() {
+    // "/" is the canonical authentication URL. Legacy login portals redirect
+    // permanently (308); the middleware provides the same guarantee as a
+    // fallback for any other /login/* path.
     return [
-      { source: '/login/admin', destination: '/login', permanent: true },
-      { source: '/login/supervisor', destination: '/login', permanent: true },
+      { source: '/login', destination: '/', permanent: true },
+      { source: '/login/:path*', destination: '/', permanent: true },
     ];
   },
   images: {

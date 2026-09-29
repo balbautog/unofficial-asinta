@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { Invoice, InvoiceStatus } from '@/types';
@@ -12,13 +12,18 @@ import {
   Eye,
   DollarSign,
   Printer,
+  Mail,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Input } from '@/components/ui/Input';
+import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { generateInvoiceReminderSMS } from '@/lib/sms/philsms';
+import { RequestPaymentModal } from '@/components/email/RequestPaymentModal';
+import { EmailHistoryModal } from '@/components/email/EmailHistoryModal';
+import { buildReminderSMS, estimateSMSSegments } from '@/lib/sms/templates';
+import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 function getNextInvoiceNumber(invoices: Invoice[], year: number): string {
   const prefix = `ASINTA-${year}-`;
@@ -52,11 +57,57 @@ export default function InvoicesPage() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isEmailHistoryOpen, setIsEmailHistoryOpen] = useState(false);
 
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [smsSending, setSmsSending] = useState(false);
   const [smsSuccess, setSmsSuccess] = useState<string | null>(null);
+  const [smsMessage, setSmsMessage] = useState('');
+  const supabaseBrowser = useMemo(() => createSupabaseBrowserClient(), []);
+
+  /**
+   * Prepares the SMS reminder for an invoice: looks up the latest SUCCESSFUL
+   * (accepted/delivered) Request for Payment email so the SMS only claims
+   * "emailed on …" when a real email log exists.
+   */
+  const openSmsModal = async (inv: Invoice) => {
+    setSelectedInvoice(inv);
+    setSmsSuccess(null);
+
+    const client = clients.find((c) => c.id === inv.client_id);
+    const proj = projects.find((p) => p.id === inv.project_id);
+
+    let emailedOn: string | null = null;
+    try {
+      const { data } = await supabaseBrowser
+        .from('email_logs')
+        .select('sent_at')
+        .eq('invoice_id', inv.id)
+        .eq('template_type', 'initial_request')
+        .in('status', ['accepted', 'delivered'])
+        .order('sent_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      emailedOn = (data as { sent_at: string | null } | null)?.sent_at ?? null;
+    } catch {
+      emailedOn = null;
+    }
+
+    setSmsMessage(
+      buildReminderSMS({
+        contactPerson: client?.contact_person,
+        companyName: client?.name,
+        invoiceNumber: inv.invoice_number,
+        projectName: proj?.name || 'your project',
+        outstandingBalance: inv.amount - inv.amount_paid,
+        dueDate: inv.due_date,
+        paymentRequestSentDate: emailedOn,
+      })
+    );
+    setIsSmsModalOpen(true);
+  };
 
   // New Invoice Form
   const initialIssueDate = today();
@@ -111,6 +162,8 @@ export default function InvoicesPage() {
       due_date: formData.due_date,
       status: formData.status,
       notes: formData.notes,
+      automatic_reminders_enabled: false,
+      reminders_paused_until: null,
     });
 
     if (created) {
@@ -141,25 +194,15 @@ export default function InvoicesPage() {
   };
 
   const handleSendPhilSMS = async () => {
-    if (!selectedInvoice) return;
+    if (!selectedInvoice || !smsMessage.trim() || smsSending) return;
     setSmsSending(true);
 
-    const client = clients.find((c) => c.id === selectedInvoice.client_id);
-    const balance = selectedInvoice.amount - selectedInvoice.amount_paid;
-    const isOverdue = selectedInvoice.status === 'overdue' || new Date(selectedInvoice.due_date) < new Date();
-
-    const msg = generateInvoiceReminderSMS(
-      client?.name || 'Valued Client',
-      selectedInvoice.invoice_number,
-      balance,
-      selectedInvoice.due_date,
-      isOverdue ? 'overdue' : 'upcoming'
-    );
-
-    const sent = await sendSMS(client?.name || 'Client', client?.phone || '', msg, selectedInvoice.id);
+    // The server resolves the authoritative recipient from the invoice's
+    // client record — no phone number is submitted from the browser.
+    const sent = await sendSMS({ invoiceId: selectedInvoice.id, message: smsMessage.trim() });
     setSmsSending(false);
     if (sent) {
-      setSmsSuccess('PhilSMS reminder queued and delivered to client mobile.');
+      setSmsSuccess('The SMS was handed to the PhilSMS gateway. Check the SMS log for its status.');
       setTimeout(() => {
         setIsSmsModalOpen(false);
         setSmsSuccess(null);
@@ -320,20 +363,45 @@ export default function InvoicesPage() {
                       </Button>
                     )}
 
-                    {inv.status !== 'paid' && (
+                    {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                       <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => {
                           setSelectedInvoice(inv);
-                          setIsSmsModalOpen(true);
+                          setIsEmailModalOpen(true);
                         }}
+                        leftIcon={<Mail className="w-3.5 h-3.5 text-navy" />}
+                        title="Send Request for Payment email"
+                      >
+                        Send Request for Payment
+                      </Button>
+                    )}
+
+                    {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => openSmsModal(inv)}
                         leftIcon={<Send className="w-3.5 h-3.5 text-navy" />}
                         title="Send PhilSMS Payment Reminder"
                       >
                         SMS
                       </Button>
                     )}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedInvoice(inv);
+                        setIsEmailHistoryOpen(true);
+                      }}
+                      leftIcon={<History className="w-3.5 h-3.5" />}
+                      title="View billing email history"
+                    >
+                      Email History
+                    </Button>
                   </div>
                 </div>
               );
@@ -639,7 +707,8 @@ export default function InvoicesPage() {
                   <div className="flex justify-between">
                     <span className="text-ink-secondary">Mobile Number:</span>
                     <span className="font-mono text-navy">
-                      {clients.find((c) => c.id === selectedInvoice.client_id)?.phone || '+63 917 842 1190'}
+                      {clients.find((c) => c.id === selectedInvoice.client_id)?.phone ||
+                        'No number on file'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -650,27 +719,35 @@ export default function InvoicesPage() {
                   </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-ink-primary text-xs leading-relaxed">
-                  {generateInvoiceReminderSMS(
-                    clients.find((c) => c.id === selectedInvoice.client_id)?.name || 'Client',
-                    selectedInvoice.invoice_number,
-                    selectedInvoice.amount - selectedInvoice.amount_paid,
-                    selectedInvoice.due_date,
-                    selectedInvoice.status === 'overdue' ? 'overdue' : 'upcoming'
-                  )}
-                </div>
+                <Textarea
+                  label="Reminder Message (editable before sending)"
+                  rows={5}
+                  value={smsMessage}
+                  onChange={(e) => setSmsMessage(e.target.value)}
+                />
+
+                {(() => {
+                  const estimate = estimateSMSSegments(smsMessage);
+                  return (
+                    <div className="text-[11px] text-ink-secondary">
+                      {estimate.characterCount} characters · {estimate.encoding} · est.{' '}
+                      {estimate.segments} SMS segment{estimate.segments === 1 ? '' : 's'}
+                    </div>
+                  );
+                })()}
 
                 <div className="pt-2 flex justify-end space-x-2">
-                  <Button variant="secondary" onClick={() => setIsSmsModalOpen(false)}>
+                  <Button variant="secondary" onClick={() => setIsSmsModalOpen(false)} disabled={smsSending}>
                     Cancel
                   </Button>
                   <Button
                     variant="primary"
                     onClick={handleSendPhilSMS}
                     isLoading={smsSending}
-                    leftIcon={<Send className="w-3.5 h-3.5" />}
+                    disabled={smsSending || !smsMessage.trim()}
+                    leftIcon={!smsSending ? <Send className="w-3.5 h-3.5" /> : undefined}
                   >
-                    Send SMS Now
+                    Confirm &amp; Send SMS
                   </Button>
                 </div>
               </>
@@ -678,6 +755,21 @@ export default function InvoicesPage() {
           </div>
         )}
       </Modal>
+
+      {/* SEND REQUEST FOR PAYMENT (EMAIL) MODAL */}
+      <RequestPaymentModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        invoiceId={selectedInvoice?.id || null}
+      />
+
+      {/* EMAIL HISTORY MODAL */}
+      <EmailHistoryModal
+        isOpen={isEmailHistoryOpen}
+        onClose={() => setIsEmailHistoryOpen(false)}
+        invoiceId={selectedInvoice?.id || null}
+        invoiceNumber={selectedInvoice?.invoice_number}
+      />
     </AppShell>
   );
 }
