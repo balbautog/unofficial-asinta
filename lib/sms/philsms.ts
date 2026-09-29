@@ -38,7 +38,7 @@ export async function sendPhilSMS({
       },
       body: JSON.stringify({
         recipient: phone.replace(/[^0-9]/g, ''),
-        sender_id: 'ASINTA',
+        sender_id: process.env.PHILSMS_SENDER_ID || 'PhilSMS',
         type: 'plain',
         message: message,
       }),
