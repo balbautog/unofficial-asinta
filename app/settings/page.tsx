@@ -21,13 +21,15 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
   const { user, isFounder } = useAuth();
-  const { resetToDefault } = useDataStore();
+  const { refresh, isLoading, isLoaded } = useDataStore();
 
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isResyncing, setIsResyncing] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,12 +37,10 @@ export default function SettingsPage() {
     setTimeout(() => setSaveSuccess(false), 2500);
   };
 
-  const handleResetData = () => {
-    if (confirm('Reset all ledger data and demo sessions back to the default Asinta Architects seed state?')) {
-      resetToDefault();
-      alert('Data reset successfully to default state.');
-      window.location.reload();
-    }
+  const handleResyncData = async () => {
+    setIsResyncing(true);
+    await refresh();
+    setIsResyncing(false);
   };
 
   return (
@@ -191,30 +191,58 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {/* Database & Demo Controls */}
+        {/* Database & Sync Controls */}
         <Card>
           <CardHeader>
             <div className="flex items-center space-x-2.5">
               <Database className="w-5 h-5 text-navy" />
-              <CardTitle>Database Management & Demo Reset</CardTitle>
+              <CardTitle>Supabase Database & Sync</CardTitle>
             </div>
-            <CardDescription>Supabase PostgreSQL schema and local data synchronization</CardDescription>
+            <CardDescription>Live PostgreSQL ledger — all records are stored and mutated server-side</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-xs">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-navy">Supabase Project</span>
+                <Badge variant={isSupabaseConfigured() ? 'success' : 'warning'} size="sm">
+                  {isSupabaseConfigured() ? 'Configured' : 'Local Dev Default'}
+                </Badge>
+              </div>
+              <div className="text-ink-secondary">
+                Endpoint:{' '}
+                <span className="font-mono text-navy font-semibold">
+                  {process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'}
+                </span>
+              </div>
+              <div className="text-[11px] text-ink-muted">
+                Data is fetched and mutated directly through Supabase PostgreSQL with Row Level
+                Security enforced on every query. There is no local mock data — to seed the demo
+                ledger, run the SQL scripts in <span className="font-mono">supabase/migrations/</span>.
+              </div>
+              <div className="text-[11px] text-ink-secondary">
+                Ledger status:{' '}
+                <span className="font-semibold text-navy">
+                  {isLoading ? 'Synchronizing…' : isLoaded ? 'Synchronized' : 'Not loaded'}
+                </span>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-200">
               <div className="space-y-0.5">
-                <div className="font-bold text-navy">Reset to Initial Asinta Batangas State</div>
+                <div className="font-bold text-navy">Resync Ledger from Supabase</div>
                 <div className="text-ink-secondary">
-                  Restores all default projects, invoices, expenses, attendance logs, and bale records.
+                  Re-fetches projects, invoices, expenses, attendance, payroll, and bale records
+                  from the live database.
                 </div>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleResetData}
+                onClick={handleResyncData}
+                isLoading={isResyncing}
                 leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
               >
-                Reset Demo Data
+                Resync Now
               </Button>
             </div>
           </CardContent>

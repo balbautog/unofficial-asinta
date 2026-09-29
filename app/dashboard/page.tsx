@@ -40,6 +40,7 @@ export default function FounderDashboard() {
     expenses,
     workers,
     advances,
+    clients,
     getFounderMetrics,
     sendSMS,
   } = useDataStore();
@@ -66,7 +67,7 @@ export default function FounderDashboard() {
     if (!selectedInvoiceForSMS) return;
     setSmsSending(true);
 
-    const client = projects.find((p) => p.id === selectedInvoiceForSMS.project_id);
+    const client = clients.find((c) => c.id === selectedInvoiceForSMS.client_id);
     const clientName = client ? client.name : 'Valued Client';
     const balance = selectedInvoiceForSMS.amount - selectedInvoiceForSMS.amount_paid;
 
@@ -78,8 +79,9 @@ export default function FounderDashboard() {
       'overdue'
     );
 
-    await sendSMS(clientName, '+63 917 842 1190', message, selectedInvoiceForSMS.id);
+    const sent = await sendSMS(clientName, client?.phone || '', message, selectedInvoiceForSMS.id);
     setSmsSending(false);
+    if (!sent) return;
     setSmsSuccessMessage('Payment reminder SMS successfully dispatched via PhilSMS!');
     setTimeout(() => {
       setSmsModalOpen(false);

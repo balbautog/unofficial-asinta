@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ToastProvider } from '@/components/ui/Toast';
 import { AuthProvider } from '@/lib/auth/authContext';
 import { DataStoreProvider } from '@/lib/data/store';
 
@@ -17,9 +18,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-surface text-ink-primary antialiased min-h-screen">
-        <AuthProvider>
-          <DataStoreProvider>{children}</DataStoreProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <DataStoreProvider>{children}</DataStoreProvider>
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

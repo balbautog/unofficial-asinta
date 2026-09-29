@@ -1,6 +1,7 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { SupabaseClient, PostgrestError } from '@supabase/supabase-js';
 import {
   Project,
   Invoice,
@@ -17,23 +18,12 @@ import {
   ExpenseCategory,
   AttendanceStatus,
 } from '@/types';
-import {
-  INITIAL_PROJECTS,
-  INITIAL_INVOICES,
-  INITIAL_EXPENSES,
-  INITIAL_WORKERS,
-  INITIAL_CLIENTS,
-  INITIAL_ADVANCES,
-  INITIAL_ATTENDANCE,
-  INITIAL_PAYROLL,
-  INITIAL_TOOLS,
-  INITIAL_SMS_LOGS,
-  INITIAL_PROJECT_SUPERVISORS,
-  INITIAL_USERS,
-} from './mockData';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth/authContext';
+import { useToast } from '@/components/ui/Toast';
 
 interface DataStoreContextType {
-  // State
+  // State (loaded from live Supabase PostgreSQL)
   projects: Project[];
   invoices: Invoice[];
   expenses: Expense[];
@@ -47,40 +37,49 @@ interface DataStoreContextType {
   projectSupervisors: ProjectSupervisor[];
   users: User[];
   isLoaded: boolean;
+  isLoading: boolean;
+  loadError: string | null;
+  refresh: () => Promise<void>;
 
   // Project Actions
-  createProject: (data: Omit<Project, 'id' | 'created_at'>) => Project;
-  updateProject: (id: string, data: Partial<Project>) => void;
-  deleteProject: (id: string) => void;
+  createProject: (data: Omit<Project, 'id' | 'created_at'>) => Promise<Project | null>;
+  updateProject: (id: string, data: Partial<Project>) => Promise<Project | null>;
+  deleteProject: (id: string) => Promise<boolean>;
   getProjectById: (id: string) => Project | undefined;
   getProjectsForSupervisor: (supervisorId: string) => Project[];
 
   // Client Actions
-  createClient: (data: Omit<Client, 'id' | 'created_at'>) => Client;
-  updateClient: (id: string, data: Partial<Client>) => void;
-  deleteClient: (id: string) => void;
+  createClient: (data: Omit<Client, 'id' | 'created_at'>) => Promise<Client | null>;
+  updateClient: (id: string, data: Partial<Client>) => Promise<Client | null>;
+  deleteClient: (id: string) => Promise<boolean>;
 
   // Worker Actions
-  createWorker: (data: Omit<Worker, 'id' | 'created_at'>) => Worker;
-  updateWorker: (id: string, data: Partial<Worker>) => void;
-  toggleWorkerStatus: (id: string) => void;
+  createWorker: (data: Omit<Worker, 'id' | 'created_at'>) => Promise<Worker | null>;
+  updateWorker: (id: string, data: Partial<Worker>) => Promise<Worker | null>;
+  toggleWorkerStatus: (id: string) => Promise<boolean>;
 
   // Invoice Actions
-  createInvoice: (data: Omit<Invoice, 'id' | 'created_at'>) => Invoice;
-  updateInvoice: (id: string, data: Partial<Invoice>) => void;
-  recordInvoicePayment: (id: string, amount: number) => void;
-  deleteInvoice: (id: string) => void;
+  createInvoice: (data: Omit<Invoice, 'id' | 'created_at'>) => Promise<Invoice | null>;
+  updateInvoice: (id: string, data: Partial<Invoice>) => Promise<Invoice | null>;
+  recordInvoicePayment: (id: string, amount: number) => Promise<boolean>;
+  deleteInvoice: (id: string) => Promise<boolean>;
 
   // Expense Actions
-  createExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Expense;
-  updateExpense: (id: string, data: Partial<Expense>) => void;
-  deleteExpense: (id: string) => void;
-  confirmAIExpense: (id: string, finalCategory: ExpenseCategory, isBale: boolean) => void;
+  createExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Promise<Expense | null>;
+  updateExpense: (id: string, data: Partial<Expense>) => Promise<Expense | null>;
+  deleteExpense: (id: string) => Promise<boolean>;
+  confirmAIExpense: (
+    id: string,
+    finalCategory: ExpenseCategory,
+    isBale: boolean
+  ) => Promise<boolean>;
 
   // Bale / Advance Actions
-  createAdvance: (data: Omit<Advance, 'id' | 'created_at' | 'amount_deducted' | 'status'>) => Advance;
-  recordAdvanceDeduction: (id: string, deductionAmount: number) => void;
-  updateAdvanceStatus: (id: string, status: Advance['status']) => void;
+  createAdvance: (
+    data: Omit<Advance, 'id' | 'created_at' | 'amount_deducted' | 'status'>
+  ) => Promise<Advance | null>;
+  recordAdvanceDeduction: (id: string, deductionAmount: number) => Promise<boolean>;
+  updateAdvanceStatus: (id: string, status: Advance['status']) => Promise<boolean>;
 
   // Attendance Actions
   recordAttendanceBatch: (records: Array<{
@@ -91,18 +90,22 @@ interface DataStoreContextType {
     hours_worked: number;
     notes?: string | null;
     recorded_by: string;
-  }>) => void;
-  updateAttendanceRecord: (id: string, data: Partial<Attendance>, isFounderOverride?: boolean) => void;
+  }>) => Promise<boolean>;
+  updateAttendanceRecord: (
+    id: string,
+    data: Partial<Attendance>,
+    isFounderOverride?: boolean
+  ) => Promise<boolean>;
   getAttendanceForProjectAndDate: (projectId: string, date: string) => Attendance[];
 
   // Payroll Actions
-  createPayrollRun: (periodStart: string, periodEnd: string) => void;
-  updatePayrollStatus: (id: string, status: Payroll['status']) => void;
+  createPayrollRun: (periodStart: string, periodEnd: string) => Promise<Payroll[] | null>;
+  updatePayrollStatus: (id: string, status: Payroll['status']) => Promise<boolean>;
 
   // Tool Actions
-  createTool: (data: Omit<Tool, 'id' | 'created_at'>) => Tool;
-  updateTool: (id: string, data: Partial<Tool>) => void;
-  deleteTool: (id: string) => void;
+  createTool: (data: Omit<Tool, 'id' | 'created_at'>) => Promise<Tool | null>;
+  updateTool: (id: string, data: Partial<Tool>) => Promise<Tool | null>;
+  deleteTool: (id: string) => Promise<boolean>;
 
   // SMS Actions
   sendSMS: (recipient: string, phone: string, message: string, invoiceId?: string) => Promise<boolean>;
@@ -131,89 +134,246 @@ interface DataStoreContextType {
       margin: number;
     }>;
   };
-
-  // Reset / Seeding
-  resetToDefault: () => void;
 }
 
 const DataStoreContext = createContext<DataStoreContextType | undefined>(undefined);
 
-const STORAGE_PREFIX = 'bale_storage_v1_';
+// ---------------------------------------------------------------------------
+// Row mappers — Postgres NUMERIC columns may arrive as strings depending on
+// the PostgREST serialization, so numeric fields are coerced explicitly.
+// ---------------------------------------------------------------------------
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const toOptionalNumber = (value: unknown): number | undefined =>
+  value === null || value === undefined ? undefined : toNumber(value);
+
+const mapProject = (row: any): Project => ({
+  ...row,
+  budget_estimate: toNumber(row.budget_estimate),
+});
+
+const mapInvoice = (row: any): Invoice => ({
+  ...row,
+  amount: toNumber(row.amount),
+  amount_paid: toNumber(row.amount_paid),
+});
+
+const mapExpense = (row: any): Expense => ({
+  ...row,
+  amount: toNumber(row.amount),
+});
+
+const mapWorker = (row: any): Worker => ({
+  ...row,
+  pay_rate: toNumber(row.pay_rate),
+});
+
+const mapClient = (row: any): Client => ({
+  ...row,
+});
+
+const mapAdvance = (row: any): Advance => ({
+  ...row,
+  amount: toNumber(row.amount),
+  amount_deducted: toNumber(row.amount_deducted),
+});
+
+const mapAttendance = (row: any): Attendance => ({
+  ...row,
+  hours_worked: toNumber(row.hours_worked),
+});
+
+const mapPayroll = (row: any): Payroll => ({
+  ...row,
+  gross_pay: toNumber(row.gross_pay),
+  bale_deduction: toNumber(row.bale_deduction),
+  other_deductions: toNumber(row.other_deductions),
+  net_pay: toNumber(row.net_pay),
+  days_worked: toOptionalNumber(row.days_worked),
+  hours_worked: toOptionalNumber(row.hours_worked),
+});
+
+const mapTool = (row: any): Tool => ({
+  ...row,
+  quantity: toNumber(row.quantity, 1),
+});
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const supabase = useMemo(() => createSupabaseClient(), []);
+  const { user, isLoading: authLoading } = useAuth();
+  const { showToast } = useToast();
+
   const [isLoaded, setIsLoaded] = useState(false);
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
-  const [expenses, setExpenses] = useState<Expense[]>(INITIAL_EXPENSES);
-  const [workers, setWorkers] = useState<Worker[]>(INITIAL_WORKERS);
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
-  const [advances, setAdvances] = useState<Advance[]>(INITIAL_ADVANCES);
-  const [attendance, setAttendance] = useState<Attendance[]>(INITIAL_ATTENDANCE);
-  const [payroll, setPayroll] = useState<Payroll[]>(INITIAL_PAYROLL);
-  const [tools, setTools] = useState<Tool[]>(INITIAL_TOOLS);
-  const [smsLogs, setSmsLogs] = useState<SMSLog[]>(INITIAL_SMS_LOGS);
-  const [projectSupervisors, setProjectSupervisors] = useState<ProjectSupervisor[]>(INITIAL_PROJECT_SUPERVISORS);
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Hydrate from localStorage
-  useEffect(() => {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [advances, setAdvances] = useState<Advance[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [payroll, setPayroll] = useState<Payroll[]>([]);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
+  const [projectSupervisors, setProjectSupervisors] = useState<ProjectSupervisor[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+
+  const inFlightRef = useRef(false);
+
+  // -------------------------------------------------------------------------
+  // Initial load — every SELECT runs with the authenticated user's JWT so
+  // PostgreSQL RLS policies determine exactly which rows are visible.
+  // -------------------------------------------------------------------------
+  const loadAll = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setIsLoading(true);
+
     try {
-      const getStored = <T,>(key: string, defaultVal: T): T => {
-        const item = localStorage.getItem(STORAGE_PREFIX + key);
-        return item ? JSON.parse(item) : defaultVal;
-      };
+      const results = await Promise.all([
+        supabase.from('projects').select('*').order('created_at', { ascending: false }),
+        supabase.from('invoices').select('*').order('created_at', { ascending: false }),
+        supabase.from('expenses').select('*').order('created_at', { ascending: false }),
+        supabase.from('workers').select('*').order('created_at', { ascending: true }),
+        supabase.from('clients').select('*').order('created_at', { ascending: true }),
+        supabase.from('advances').select('*').order('created_at', { ascending: false }),
+        supabase.from('attendance').select('*').order('date', { ascending: false }),
+        supabase.from('payroll').select('*').order('created_at', { ascending: false }),
+        supabase.from('tools').select('*').order('created_at', { ascending: true }),
+        supabase.from('sms_logs').select('*').order('sent_at', { ascending: false }),
+        supabase.from('project_supervisors').select('*'),
+        supabase.from('users').select('*').order('created_at', { ascending: true }),
+      ]);
 
-      setProjects(getStored('projects', INITIAL_PROJECTS));
-      setInvoices(getStored('invoices', INITIAL_INVOICES));
-      setExpenses(getStored('expenses', INITIAL_EXPENSES));
-      setWorkers(getStored('workers', INITIAL_WORKERS));
-      setClients(getStored('clients', INITIAL_CLIENTS));
-      setAdvances(getStored('advances', INITIAL_ADVANCES));
-      setAttendance(getStored('attendance', INITIAL_ATTENDANCE));
-      setPayroll(getStored('payroll', INITIAL_PAYROLL));
-      setTools(getStored('tools', INITIAL_TOOLS));
-      setSmsLogs(getStored('smsLogs', INITIAL_SMS_LOGS));
-      setProjectSupervisors(getStored('projectSupervisors', INITIAL_PROJECT_SUPERVISORS));
-      setUsers(getStored('users', INITIAL_USERS));
-    } catch (e) {
-      console.warn('LocalStorage hydration fallback to mock initial', e);
-    } finally {
+      const firstError = results.find((r) => r.error)?.error as PostgrestError | undefined;
+      if (firstError) {
+        console.error('Supabase data load failed:', firstError.message);
+        setLoadError(
+          `Could not load BALE ledger data from Supabase: ${firstError.message}. ` +
+            'Check your connection and Row Level Security policies, then retry.'
+        );
+      } else {
+        setLoadError(null);
+      }
+
+      setProjects((results[0].data ?? []).map(mapProject));
+      setInvoices((results[1].data ?? []).map(mapInvoice));
+      setExpenses((results[2].data ?? []).map(mapExpense));
+      setWorkers((results[3].data ?? []).map(mapWorker));
+      setClients((results[4].data ?? []).map(mapClient));
+      setAdvances((results[5].data ?? []).map(mapAdvance));
+      setAttendance((results[6].data ?? []).map(mapAttendance));
+      setPayroll((results[7].data ?? []).map(mapPayroll));
+      setTools((results[8].data ?? []).map(mapTool));
+      setSmsLogs((results[9].data ?? []));
+      setProjectSupervisors((results[10].data ?? []));
+      setUsers((results[11].data ?? []));
       setIsLoaded(true);
+    } catch (e: any) {
+      console.error('Unexpected error while loading BALE data:', e);
+      setLoadError(
+        e?.message ||
+          'Unexpected network error while contacting Supabase. Please check your connection and retry.'
+      );
+    } finally {
+      setIsLoading(false);
+      inFlightRef.current = false;
     }
+  }, [supabase]);
+
+  const clearAll = useCallback(() => {
+    setProjects([]);
+    setInvoices([]);
+    setExpenses([]);
+    setWorkers([]);
+    setClients([]);
+    setAdvances([]);
+    setAttendance([]);
+    setPayroll([]);
+    setTools([]);
+    setSmsLogs([]);
+    setProjectSupervisors([]);
+    setUsers([]);
+    setIsLoaded(false);
+    setLoadError(null);
   }, []);
 
-  // Sync to localStorage
-  const persist = useCallback((key: string, value: any) => {
-    try {
-      localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
-    } catch (e) {
-      console.warn('LocalStorage save failed:', e);
+  // Load when a user is authenticated; clear when signed out.
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      clearAll();
+      return;
     }
-  }, []);
+    loadAll();
+  }, [user, authLoading, loadAll, clearAll]);
+
+  const refresh = useCallback(async () => {
+    inFlightRef.current = false;
+    await loadAll();
+  }, [loadAll]);
+
+  // -------------------------------------------------------------------------
+  // Mutation helper — runs a Supabase mutation, surfaces failures as error
+  // toasts and returns the resulting row (or null).
+  // -------------------------------------------------------------------------
+  const runMutation = useCallback(
+    async <T,>(label: string, fn: (client: SupabaseClient) => PromiseLike<{ data: T | null; error: PostgrestError | null }>): Promise<T | null> => {
+      try {
+        const { data, error } = await fn(supabase);
+        if (error) {
+          console.error(`${label} failed:`, error.message);
+          showToast('error', `${label} failed: ${error.message}`);
+          return null;
+        }
+        return data;
+      } catch (e: any) {
+        console.error(`${label} threw:`, e);
+        showToast('error', `${label} failed: ${e?.message || 'Supabase request error'}`);
+        return null;
+      }
+    },
+    [supabase, showToast]
+  );
 
   // --- PROJECT ACTIONS ---
-  const createProject = (data: Omit<Project, 'id' | 'created_at'>): Project => {
-    const newProj: Project = {
-      ...data,
-      id: `proj-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newProj, ...projects];
-    setProjects(updated);
-    persist('projects', updated);
-    return newProj;
+  const createProject = async (data: Omit<Project, 'id' | 'created_at'>): Promise<Project | null> => {
+    const row = await runMutation('Create project', (db) =>
+      db.from('projects').insert(data).select().single()
+    );
+    const mapped = row ? mapProject(row) : null;
+    if (mapped) setProjects((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const updateProject = (id: string, data: Partial<Project>) => {
-    const updated = projects.map((p) => (p.id === id ? { ...p, ...data } : p));
-    setProjects(updated);
-    persist('projects', updated);
+  const updateProject = async (id: string, data: Partial<Project>): Promise<Project | null> => {
+    const row = await runMutation('Update project', (db) =>
+      db.from('projects').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapProject(row) : null;
+    if (mapped) setProjects((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+    return mapped;
   };
 
-  const deleteProject = (id: string) => {
-    const updated = projects.filter((p) => p.id !== id);
-    setProjects(updated);
-    persist('projects', updated);
+  const deleteProject = async (id: string): Promise<boolean> => {
+    const ok = await runMutation('Delete project', async (db) => {
+      const { error } = await db.from('projects').delete().eq('id', id);
+      return { data: !error, error };
+    });
+    if (ok) {
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      return true;
+    }
+    return false;
   };
 
   const getProjectById = (id: string) => projects.find((p) => p.id === id);
@@ -226,174 +386,220 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // --- CLIENT ACTIONS ---
-  const createClient = (data: Omit<Client, 'id' | 'created_at'>): Client => {
-    const newCli: Client = {
-      ...data,
-      id: `cli-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newCli, ...clients];
-    setClients(updated);
-    persist('clients', updated);
-    return newCli;
+  const createClient = async (data: Omit<Client, 'id' | 'created_at'>): Promise<Client | null> => {
+    const row = await runMutation('Create client', (db) =>
+      db.from('clients').insert(data).select().single()
+    );
+    const mapped = row ? mapClient(row) : null;
+    if (mapped) setClients((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const updateClient = (id: string, data: Partial<Client>) => {
-    const updated = clients.map((c) => (c.id === id ? { ...c, ...data } : c));
-    setClients(updated);
-    persist('clients', updated);
+  const updateClient = async (id: string, data: Partial<Client>): Promise<Client | null> => {
+    const row = await runMutation('Update client', (db) =>
+      db.from('clients').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapClient(row) : null;
+    if (mapped) setClients((prev) => prev.map((c) => (c.id === id ? mapped : c)));
+    return mapped;
   };
 
-  const deleteClient = (id: string) => {
-    const updated = clients.filter((c) => c.id !== id);
-    setClients(updated);
-    persist('clients', updated);
+  const deleteClient = async (id: string): Promise<boolean> => {
+    const ok = await runMutation('Delete client', async (db) => {
+      const { error } = await db.from('clients').delete().eq('id', id);
+      return { data: !error, error };
+    });
+    if (ok) {
+      setClients((prev) => prev.filter((c) => c.id !== id));
+      return true;
+    }
+    return false;
   };
 
   // --- WORKER ACTIONS ---
-  const createWorker = (data: Omit<Worker, 'id' | 'created_at'>): Worker => {
-    const newWrk: Worker = {
-      ...data,
-      id: `wrk-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [...workers, newWrk];
-    setWorkers(updated);
-    persist('workers', updated);
-    return newWrk;
+  const createWorker = async (data: Omit<Worker, 'id' | 'created_at'>): Promise<Worker | null> => {
+    const row = await runMutation('Create worker', (db) =>
+      db.from('workers').insert(data).select().single()
+    );
+    const mapped = row ? mapWorker(row) : null;
+    if (mapped) setWorkers((prev) => [...prev, mapped]);
+    return mapped;
   };
 
-  const updateWorker = (id: string, data: Partial<Worker>) => {
-    const updated = workers.map((w) => (w.id === id ? { ...w, ...data } : w));
-    setWorkers(updated);
-    persist('workers', updated);
+  const updateWorker = async (id: string, data: Partial<Worker>): Promise<Worker | null> => {
+    const row = await runMutation('Update worker', (db) =>
+      db.from('workers').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapWorker(row) : null;
+    if (mapped) setWorkers((prev) => prev.map((w) => (w.id === id ? mapped : w)));
+    return mapped;
   };
 
-  const toggleWorkerStatus = (id: string) => {
-    const updated = workers.map((w) => (w.id === id ? { ...w, active: !w.active } : w));
-    setWorkers(updated);
-    persist('workers', updated);
+  const toggleWorkerStatus = async (id: string): Promise<boolean> => {
+    const current = workers.find((w) => w.id === id);
+    if (!current) {
+      showToast('error', 'Worker not found in the current ledger snapshot.');
+      return false;
+    }
+    const row = await runMutation('Toggle worker status', (db) =>
+      db.from('workers').update({ active: !current.active }).eq('id', id).select().single()
+    );
+    const mapped = row ? mapWorker(row) : null;
+    if (mapped) setWorkers((prev) => prev.map((w) => (w.id === id ? mapped : w)));
+    return Boolean(mapped);
   };
 
   // --- INVOICE ACTIONS ---
-  const createInvoice = (data: Omit<Invoice, 'id' | 'created_at'>): Invoice => {
-    const newInv: Invoice = {
-      ...data,
-      id: `inv-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newInv, ...invoices];
-    setInvoices(updated);
-    persist('invoices', updated);
-    return newInv;
+  const createInvoice = async (data: Omit<Invoice, 'id' | 'created_at'>): Promise<Invoice | null> => {
+    const row = await runMutation('Create invoice', (db) =>
+      db.from('invoices').insert(data).select().single()
+    );
+    const mapped = row ? mapInvoice(row) : null;
+    if (mapped) setInvoices((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const updateInvoice = (id: string, data: Partial<Invoice>) => {
-    const updated = invoices.map((inv) => {
-      if (inv.id === id) {
-        const merged = { ...inv, ...data };
-        // Automatic status recalculation based on amount_paid vs amount
-        if (merged.amount_paid >= merged.amount && merged.amount > 0) {
-          merged.status = 'paid';
-        } else if (merged.amount_paid > 0 && merged.amount_paid < merged.amount) {
-          merged.status = 'partially_paid';
+  const updateInvoice = async (id: string, data: Partial<Invoice>): Promise<Invoice | null> => {
+    // Automatic status recalculation based on amount_paid vs amount.
+    const current = invoices.find((i) => i.id === id);
+    if (current) {
+      const mergedAmount = data.amount !== undefined ? Number(data.amount) : current.amount;
+      const mergedPaid = data.amount_paid !== undefined ? Number(data.amount_paid) : current.amount_paid;
+      if (data.status === undefined) {
+        if (mergedPaid >= mergedAmount && mergedAmount > 0) {
+          data = { ...data, status: 'paid' };
+        } else if (mergedPaid > 0 && mergedPaid < mergedAmount) {
+          data = { ...data, status: 'partially_paid' };
         }
-        return merged;
       }
-      return inv;
-    });
-    setInvoices(updated);
-    persist('invoices', updated);
+    }
+
+    const row = await runMutation('Update invoice', (db) =>
+      db.from('invoices').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapInvoice(row) : null;
+    if (mapped) setInvoices((prev) => prev.map((i) => (i.id === id ? mapped : i)));
+    return mapped;
   };
 
-  const recordInvoicePayment = (id: string, amount: number) => {
+  const recordInvoicePayment = async (id: string, amount: number): Promise<boolean> => {
     const inv = invoices.find((i) => i.id === id);
-    if (!inv) return;
-    const newPaid = Number(inv.amount_paid) + Number(amount);
+    if (!inv) {
+      showToast('error', 'Invoice not found in the current ledger snapshot.');
+      return false;
+    }
+    const newPaid = round2(inv.amount_paid + Number(amount || 0));
     const newStatus = newPaid >= inv.amount ? 'paid' : 'partially_paid';
-    updateInvoice(id, { amount_paid: newPaid, status: newStatus });
+    const updated = await updateInvoice(id, { amount_paid: newPaid, status: newStatus });
+    return Boolean(updated);
   };
 
-  const deleteInvoice = (id: string) => {
-    const updated = invoices.filter((i) => i.id !== id);
-    setInvoices(updated);
-    persist('invoices', updated);
+  const deleteInvoice = async (id: string): Promise<boolean> => {
+    const ok = await runMutation('Delete invoice', async (db) => {
+      const { error } = await db.from('invoices').delete().eq('id', id);
+      return { data: !error, error };
+    });
+    if (ok) {
+      setInvoices((prev) => prev.filter((i) => i.id !== id));
+      return true;
+    }
+    return false;
   };
 
   // --- EXPENSE ACTIONS ---
-  const createExpense = (data: Omit<Expense, 'id' | 'created_at'>): Expense => {
-    const newExp: Expense = {
-      ...data,
-      id: `exp-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newExp, ...expenses];
-    setExpenses(updated);
-    persist('expenses', updated);
-    return newExp;
+  const createExpense = async (data: Omit<Expense, 'id' | 'created_at'>): Promise<Expense | null> => {
+    const row = await runMutation('Record expense', (db) =>
+      db.from('expenses').insert(data).select().single()
+    );
+    const mapped = row ? mapExpense(row) : null;
+    if (mapped) setExpenses((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const updateExpense = (id: string, data: Partial<Expense>) => {
-    const updated = expenses.map((e) => (e.id === id ? { ...e, ...data } : e));
-    setExpenses(updated);
-    persist('expenses', updated);
+  const updateExpense = async (id: string, data: Partial<Expense>): Promise<Expense | null> => {
+    const row = await runMutation('Update expense', (db) =>
+      db.from('expenses').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapExpense(row) : null;
+    if (mapped) setExpenses((prev) => prev.map((e) => (e.id === id ? mapped : e)));
+    return mapped;
   };
 
-  const deleteExpense = (id: string) => {
-    const updated = expenses.filter((e) => e.id !== id);
-    setExpenses(updated);
-    persist('expenses', updated);
+  const deleteExpense = async (id: string): Promise<boolean> => {
+    const ok = await runMutation('Delete expense', async (db) => {
+      const { error } = await db.from('expenses').delete().eq('id', id);
+      return { data: !error, error };
+    });
+    if (ok) {
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+      return true;
+    }
+    return false;
   };
 
-  const confirmAIExpense = (id: string, finalCategory: ExpenseCategory, isBale: boolean) => {
-    const exp = expenses.find((e) => e.id === id);
-    if (!exp) return;
-    updateExpense(id, {
+  const confirmAIExpense = async (
+    id: string,
+    finalCategory: ExpenseCategory,
+    _isBale: boolean
+  ): Promise<boolean> => {
+    const updated = await updateExpense(id, {
       category: finalCategory,
       ai_confirmed: true,
     });
+    return Boolean(updated);
   };
 
   // --- BALE / ADVANCES ACTIONS ---
-  const createAdvance = (data: Omit<Advance, 'id' | 'created_at' | 'amount_deducted' | 'status'>): Advance => {
-    const newAdv: Advance = {
-      ...data,
-      id: `adv-${Date.now().toString().slice(-6)}`,
-      amount_deducted: 0,
-      status: 'active',
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newAdv, ...advances];
-    setAdvances(updated);
-    persist('advances', updated);
-    return newAdv;
+  const createAdvance = async (
+    data: Omit<Advance, 'id' | 'created_at' | 'amount_deducted' | 'status'>
+  ): Promise<Advance | null> => {
+    const row = await runMutation('Record bale advance', (db) =>
+      db
+        .from('advances')
+        .insert({ ...data, amount_deducted: 0, status: 'active' })
+        .select()
+        .single()
+    );
+    const mapped = row ? mapAdvance(row) : null;
+    if (mapped) setAdvances((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const recordAdvanceDeduction = (id: string, deductionAmount: number) => {
-    const updated = advances.map((adv) => {
-      if (adv.id === id) {
-        const newDeducted = Math.min(adv.amount, Number(adv.amount_deducted) + Number(deductionAmount));
-        const newStatus: Advance['status'] = newDeducted >= adv.amount ? 'fully_deducted' : 'partially_deducted';
-        return {
-          ...adv,
-          amount_deducted: newDeducted,
-          status: newStatus,
-        };
-      }
-      return adv;
-    });
-    setAdvances(updated);
-    persist('advances', updated);
+  const recordAdvanceDeduction = async (id: string, deductionAmount: number): Promise<boolean> => {
+    const adv = advances.find((a) => a.id === id);
+    if (!adv) {
+      showToast('error', 'Advance record not found in the current ledger snapshot.');
+      return false;
+    }
+    const newDeducted = round2(
+      Math.min(adv.amount, Number(adv.amount_deducted) + Number(deductionAmount || 0))
+    );
+    const newStatus: Advance['status'] =
+      newDeducted >= adv.amount ? 'fully_deducted' : 'partially_deducted';
+    const row = await runMutation('Record advance deduction', (db) =>
+      db
+        .from('advances')
+        .update({ amount_deducted: newDeducted, status: newStatus })
+        .eq('id', id)
+        .select()
+        .single()
+    );
+    const mapped = row ? mapAdvance(row) : null;
+    if (mapped) setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+    return Boolean(mapped);
   };
 
-  const updateAdvanceStatus = (id: string, status: Advance['status']) => {
-    const updated = advances.map((a) => (a.id === id ? { ...a, status } : a));
-    setAdvances(updated);
-    persist('advances', updated);
+  const updateAdvanceStatus = async (id: string, status: Advance['status']): Promise<boolean> => {
+    const row = await runMutation('Update advance status', (db) =>
+      db.from('advances').update({ status }).eq('id', id).select().single()
+    );
+    const mapped = row ? mapAdvance(row) : null;
+    if (mapped) setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+    return Boolean(mapped);
   };
 
   // --- ATTENDANCE ACTIONS ---
-  const recordAttendanceBatch = (
+  const recordAttendanceBatch = async (
     records: Array<{
       worker_id: string;
       project_id: string;
@@ -403,57 +609,62 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       notes?: string | null;
       recorded_by: string;
     }>
-  ) => {
-    let current = [...attendance];
-    records.forEach((rec) => {
-      // Find existing for same worker + project + date
-      const existingIdx = current.findIndex(
-        (a) => a.worker_id === rec.worker_id && a.project_id === rec.project_id && a.date === rec.date
-      );
+  ): Promise<boolean> => {
+    const now = new Date().toISOString();
+    const rows = records.map((rec) => ({
+      worker_id: rec.worker_id,
+      project_id: rec.project_id,
+      date: rec.date,
+      status: rec.status,
+      hours_worked: rec.hours_worked,
+      notes: rec.notes || null,
+      recorded_by: rec.recorded_by,
+      submitted_at: now,
+    }));
 
-      if (existingIdx >= 0) {
-        current[existingIdx] = {
-          ...current[existingIdx],
-          status: rec.status,
-          hours_worked: rec.hours_worked,
-          notes: rec.notes ?? current[existingIdx].notes,
-          recorded_by: rec.recorded_by,
-          submitted_at: new Date().toISOString(),
-        };
-      } else {
-        current.push({
-          id: `att-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6)}`,
-          worker_id: rec.worker_id,
-          project_id: rec.project_id,
-          date: rec.date,
-          status: rec.status,
-          hours_worked: rec.hours_worked,
-          notes: rec.notes || null,
-          recorded_by: rec.recorded_by,
-          is_founder_override: false,
-          submitted_at: new Date().toISOString(),
-          created_at: new Date().toISOString(),
-        });
-      }
+    // Upsert keyed on the UNIQUE(worker_id, project_id, date) constraint so
+    // re-submitting a day's roster updates existing records.
+    const inserted = await runMutation('Submit attendance', (db) =>
+      db
+        .from('attendance')
+        .upsert(rows, { onConflict: 'worker_id,project_id,date' })
+        .select()
+    );
+    if (!inserted) return false;
+
+    const mappedRows = (inserted as any[]).map(mapAttendance);
+    setAttendance((prev) => {
+      const next = [...prev];
+      mappedRows.forEach((row) => {
+        const idx = next.findIndex(
+          (a) => a.worker_id === row.worker_id && a.project_id === row.project_id && a.date === row.date
+        );
+        if (idx >= 0) next[idx] = row;
+        else next.unshift(row);
+      });
+      return next;
     });
-
-    setAttendance(current);
-    persist('attendance', current);
+    return true;
   };
 
-  const updateAttendanceRecord = (id: string, data: Partial<Attendance>, isFounderOverride = false) => {
-    const updated = attendance.map((a) =>
-      a.id === id
-        ? {
-            ...a,
-            ...data,
-            is_founder_override: isFounderOverride ? true : a.is_founder_override,
-            submitted_at: new Date().toISOString(),
-          }
-        : a
+  const updateAttendanceRecord = async (
+    id: string,
+    data: Partial<Attendance>,
+    isFounderOverride = false
+  ): Promise<boolean> => {
+    const payload: Partial<Attendance> = {
+      ...data,
+      submitted_at: new Date().toISOString(),
+    };
+    if (isFounderOverride) {
+      payload.is_founder_override = true;
+    }
+    const row = await runMutation('Update attendance record', (db) =>
+      db.from('attendance').update(payload).eq('id', id).select().single()
     );
-    setAttendance(updated);
-    persist('attendance', updated);
+    const mapped = row ? mapAttendance(row) : null;
+    if (mapped) setAttendance((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+    return Boolean(mapped);
   };
 
   const getAttendanceForProjectAndDate = (projectId: string, date: string) => {
@@ -461,128 +672,184 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // --- PAYROLL ACTIONS ---
-  const createPayrollRun = (periodStart: string, periodEnd: string) => {
-    // Generate payroll rows for active workers based on attendance in date range
-    const newPayrollList: Payroll[] = [];
+  const createPayrollRun = async (
+    periodStart: string,
+    periodEnd: string
+  ): Promise<Payroll[] | null> => {
+    // Generate payroll rows for active workers based on attendance in range.
+    const rows: Array<Omit<Payroll, 'id' | 'created_at'>> = [];
 
-    workers.filter((w) => w.active).forEach((w) => {
-      // Calculate attendance in period
-      const workerAtt = attendance.filter(
-        (a) => a.worker_id === w.id && a.date >= periodStart && a.date <= periodEnd
-      );
+    workers
+      .filter((w) => w.active)
+      .forEach((w) => {
+        const workerAtt = attendance.filter(
+          (a) => a.worker_id === w.id && a.date >= periodStart && a.date <= periodEnd
+        );
 
-      const daysPresent = workerAtt.filter((a) => a.status === 'present').length;
-      const halfDays = workerAtt.filter((a) => a.status === 'half_day').length;
-      const effectiveDays = daysPresent + halfDays * 0.5;
-      const hoursTotal = workerAtt.reduce((sum, a) => sum + (a.hours_worked || 0), 0);
+        const daysPresent = workerAtt.filter((a) => a.status === 'present').length;
+        const halfDays = workerAtt.filter((a) => a.status === 'half_day').length;
+        const effectiveDays = daysPresent + halfDays * 0.5;
+        const hoursTotal = workerAtt.reduce((sum, a) => sum + (a.hours_worked || 0), 0);
 
-      const gross = w.pay_rate_type === 'daily' ? effectiveDays * w.pay_rate : hoursTotal * w.pay_rate;
+        const gross = w.pay_rate_type === 'daily' ? effectiveDays * w.pay_rate : hoursTotal * w.pay_rate;
 
-      // Check active bale for worker
-      const activeBales = advances.filter(
-        (adv) => adv.worker_id === w.id && (adv.status === 'active' || adv.status === 'partially_deducted')
-      );
-      const totalBaleOutstanding = activeBales.reduce(
-        (sum, adv) => sum + (adv.amount - adv.amount_deducted),
-        0
-      );
+        const activeBales = advances.filter(
+          (adv) =>
+            adv.worker_id === w.id && (adv.status === 'active' || adv.status === 'partially_deducted')
+        );
+        const totalBaleOutstanding = activeBales.reduce(
+          (sum, adv) => sum + (adv.amount - adv.amount_deducted),
+          0
+        );
 
-      // Default suggested deduction: either ₱1,500 or half the bale or half gross pay
-      let suggestedDeduction = 0;
-      if (totalBaleOutstanding > 0 && gross > 0) {
-        suggestedDeduction = Math.min(totalBaleOutstanding, Math.min(1500, Math.floor(gross * 0.3)));
-      }
+        // Default suggested deduction: either ₱1,500 or 30% of gross pay,
+        // capped by the outstanding bale balance.
+        let suggestedDeduction = 0;
+        if (totalBaleOutstanding > 0 && gross > 0) {
+          suggestedDeduction = Math.min(
+            totalBaleOutstanding,
+            Math.min(1500, Math.floor(gross * 0.3))
+          );
+        }
 
-      const net = Math.max(0, gross - suggestedDeduction);
+        const net = Math.max(0, gross - suggestedDeduction);
 
-      newPayrollList.push({
-        id: `pay-${Date.now().toString().slice(-6)}-${w.id.slice(-4)}`,
-        worker_id: w.id,
-        period_start: periodStart,
-        period_end: periodEnd,
-        gross_pay: Math.round(gross),
-        bale_deduction: suggestedDeduction,
-        other_deductions: 0,
-        net_pay: Math.round(net),
-        status: 'draft',
-        days_worked: effectiveDays,
-        hours_worked: hoursTotal,
-        notes: `Auto-computed from ${effectiveDays} days attendance`,
-        created_at: new Date().toISOString(),
+        rows.push({
+          worker_id: w.id,
+          period_start: periodStart,
+          period_end: periodEnd,
+          gross_pay: Math.round(gross),
+          bale_deduction: suggestedDeduction,
+          other_deductions: 0,
+          net_pay: Math.round(net),
+          status: 'draft',
+          days_worked: effectiveDays,
+          hours_worked: hoursTotal,
+          notes: `Auto-computed from ${effectiveDays} days attendance`,
+        });
       });
-    });
 
-    const updated = [...newPayrollList, ...payroll];
-    setPayroll(updated);
-    persist('payroll', updated);
+    const inserted = await runMutation('Create payroll run', (db) =>
+      db.from('payroll').insert(rows).select()
+    );
+    if (!inserted) return null;
+
+    const mappedRows = (inserted as any[]).map(mapPayroll).reverse();
+    setPayroll((prev) => [...mappedRows, ...prev]);
+    return mappedRows;
   };
 
-  const updatePayrollStatus = (id: string, status: Payroll['status']) => {
+  const updatePayrollStatus = async (id: string, status: Payroll['status']): Promise<boolean> => {
     const payItem = payroll.find((p) => p.id === id);
-    if (payItem && status === 'paid' && payItem.bale_deduction > 0) {
-      // Automatically deduct from worker's active bale!
-      const activeBales = advances.filter(
-        (a) => a.worker_id === payItem.worker_id && (a.status === 'active' || a.status === 'partially_deducted')
-      );
-      let remToDeduct = payItem.bale_deduction;
-      activeBales.forEach((adv) => {
-        if (remToDeduct <= 0) return;
-        const curBalance = adv.amount - adv.amount_deducted;
-        const deductThis = Math.min(remToDeduct, curBalance);
-        recordAdvanceDeduction(adv.id, deductThis);
-        remToDeduct -= deductThis;
-      });
+    if (!payItem) {
+      showToast('error', 'Payroll record not found in the current ledger snapshot.');
+      return false;
     }
 
-    const updated = payroll.map((p) => (p.id === id ? { ...p, status } : p));
-    setPayroll(updated);
-    persist('payroll', updated);
+    // Automatically deduct from the worker's active bale when marking as paid.
+    if (status === 'paid' && payItem.bale_deduction > 0) {
+      const activeBales = advances.filter(
+        (a) =>
+          a.worker_id === payItem.worker_id &&
+          (a.status === 'active' || a.status === 'partially_deducted')
+      );
+      let remToDeduct = payItem.bale_deduction;
+      for (const adv of activeBales) {
+        if (remToDeduct <= 0) break;
+        const curBalance = adv.amount - adv.amount_deducted;
+        const deductThis = Math.min(remToDeduct, curBalance);
+        await recordAdvanceDeduction(adv.id, deductThis);
+        remToDeduct -= deductThis;
+      }
+    }
+
+    const row = await runMutation('Update payroll status', (db) =>
+      db.from('payroll').update({ status }).eq('id', id).select().single()
+    );
+    const mapped = row ? mapPayroll(row) : null;
+    if (mapped) setPayroll((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+    return Boolean(mapped);
   };
 
   // --- TOOLS ACTIONS ---
-  const createTool = (data: Omit<Tool, 'id' | 'created_at'>): Tool => {
-    const newTool: Tool = {
-      ...data,
-      id: `tool-${Date.now().toString().slice(-6)}`,
-      created_at: new Date().toISOString(),
-    };
-    const updated = [newTool, ...tools];
-    setTools(updated);
-    persist('tools', updated);
-    return newTool;
+  const createTool = async (data: Omit<Tool, 'id' | 'created_at'>): Promise<Tool | null> => {
+    const row = await runMutation('Create tool', (db) =>
+      db.from('tools').insert(data).select().single()
+    );
+    const mapped = row ? mapTool(row) : null;
+    if (mapped) setTools((prev) => [mapped, ...prev]);
+    return mapped;
   };
 
-  const updateTool = (id: string, data: Partial<Tool>) => {
-    const updated = tools.map((t) => (t.id === id ? { ...t, ...data } : t));
-    setTools(updated);
-    persist('tools', updated);
+  const updateTool = async (id: string, data: Partial<Tool>): Promise<Tool | null> => {
+    const row = await runMutation('Update tool', (db) =>
+      db.from('tools').update(data).eq('id', id).select().single()
+    );
+    const mapped = row ? mapTool(row) : null;
+    if (mapped) setTools((prev) => prev.map((t) => (t.id === id ? mapped : t)));
+    return mapped;
   };
 
-  const deleteTool = (id: string) => {
-    const updated = tools.filter((t) => t.id !== id);
-    setTools(updated);
-    persist('tools', updated);
+  const deleteTool = async (id: string): Promise<boolean> => {
+    const ok = await runMutation('Delete tool', async (db) => {
+      const { error } = await db.from('tools').delete().eq('id', id);
+      return { data: !error, error };
+    });
+    if (ok) {
+      setTools((prev) => prev.filter((t) => t.id !== id));
+      return true;
+    }
+    return false;
   };
 
   // --- SMS ACTIONS ---
-  const sendSMS = async (recipient: string, phone: string, message: string, invoiceId?: string): Promise<boolean> => {
+  const sendSMS = async (
+    recipient: string,
+    phone: string,
+    message: string,
+    invoiceId?: string
+  ): Promise<boolean> => {
     try {
-      // Simulate/call SMS endpoint
-      const newLog: SMSLog = {
-        id: `sms-${Date.now().toString().slice(-6)}`,
-        invoice_id: invoiceId || null,
-        recipient,
-        phone,
-        message,
-        status: 'delivered',
-        sent_at: new Date().toISOString(),
-      };
-      const updated = [newLog, ...smsLogs];
-      setSmsLogs(updated);
-      persist('smsLogs', updated);
-      return true;
-    } catch (e) {
-      console.error('SMS Send error:', e);
+      const res = await fetch('/api/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient, phone, message, invoiceId }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `SMS gateway responded with status ${res.status}`);
+      }
+
+      const result: { success: boolean; simulated?: boolean; error?: string } = await res.json();
+      const status: SMSLog['status'] = result.success ? (result.simulated ? 'pending' : 'delivered') : 'failed';
+
+      const row = await runMutation('Log SMS message', (db) =>
+        db
+          .from('sms_logs')
+          .insert({
+            invoice_id: invoiceId || null,
+            recipient,
+            phone,
+            message,
+            status,
+          })
+          .select()
+          .single()
+      );
+      if (!row) return false;
+
+      setSmsLogs((prev) => [row as SMSLog, ...prev]);
+
+      if (result.simulated) {
+        showToast(
+          'info',
+          'PHILSMS_API_KEY is not configured — the message was logged in simulation mode and has not left the server.'
+        );
+      }
+      return result.success;
+    } catch (e: any) {
+      showToast('error', `SMS dispatch failed: ${e?.message || 'network error'}`);
       return false;
     }
   };
@@ -596,10 +863,14 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const totalCollected = invoices.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
     const totalOutstanding = Math.max(0, totalInvoiced - totalCollected);
 
+    const now = new Date();
     const overdueInvoices = invoices.filter(
-      (i) => i.status === 'overdue' || (i.status !== 'paid' && new Date(i.due_date) < new Date('2026-09-13'))
+      (i) => i.status === 'overdue' || (i.status !== 'paid' && i.status !== 'cancelled' && new Date(i.due_date) < now)
     );
-    const totalOverdue = overdueInvoices.reduce((sum, i) => sum + (Number(i.amount) - Number(i.amount_paid)), 0);
+    const totalOverdue = overdueInvoices.reduce(
+      (sum, i) => sum + (Number(i.amount) - Number(i.amount_paid)),
+      0
+    );
 
     const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
@@ -618,7 +889,9 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     });
 
-    const pendingPayroll = payroll.filter((p) => p.status === 'draft' || p.status === 'reviewed' || p.status === 'approved');
+    const pendingPayroll = payroll.filter(
+      (p) => p.status === 'draft' || p.status === 'reviewed' || p.status === 'approved'
+    );
     const totalPayrollPending = pendingPayroll.reduce((sum, p) => sum + Number(p.net_pay || 0), 0);
 
     const totalBaleBalance = advances
@@ -663,22 +936,6 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
   };
 
-  const resetToDefault = () => {
-    localStorage.clear();
-    setProjects(INITIAL_PROJECTS);
-    setInvoices(INITIAL_INVOICES);
-    setExpenses(INITIAL_EXPENSES);
-    setWorkers(INITIAL_WORKERS);
-    setClients(INITIAL_CLIENTS);
-    setAdvances(INITIAL_ADVANCES);
-    setAttendance(INITIAL_ATTENDANCE);
-    setPayroll(INITIAL_PAYROLL);
-    setTools(INITIAL_TOOLS);
-    setSmsLogs(INITIAL_SMS_LOGS);
-    setProjectSupervisors(INITIAL_PROJECT_SUPERVISORS);
-    setUsers(INITIAL_USERS);
-  };
-
   return (
     <DataStoreContext.Provider
       value={{
@@ -695,6 +952,9 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         projectSupervisors,
         users,
         isLoaded,
+        isLoading,
+        loadError,
+        refresh,
         createProject,
         updateProject,
         deleteProject,
@@ -727,7 +987,6 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         deleteTool,
         sendSMS,
         getFounderMetrics,
-        resetToDefault,
       }}
     >
       {children}

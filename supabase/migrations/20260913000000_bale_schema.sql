@@ -2,11 +2,12 @@
 -- Asinta Architects - Database Schema & Security Policies (Supabase PostgreSQL)
 
 -- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- UUID primary keys use gen_random_uuid(), built into PostgreSQL 13+
+-- (and always available on Supabase) — no extension required.
 
 -- 1. USERS TABLE
 CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('founder', 'supervisor')),
@@ -15,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 -- 2. WORKERS TABLE
 CREATE TABLE IF NOT EXISTS public.workers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     contact_number TEXT NOT NULL,
     position TEXT NOT NULL,
@@ -27,7 +28,7 @@ CREATE TABLE IF NOT EXISTS public.workers (
 
 -- 3. CLIENTS TABLE
 CREATE TABLE IF NOT EXISTS public.clients (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     contact_person TEXT NOT NULL,
     phone TEXT NOT NULL,
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS public.clients (
 
 -- 4. PROJECTS TABLE
 CREATE TABLE IF NOT EXISTS public.projects (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE RESTRICT,
     location TEXT NOT NULL,
@@ -51,7 +52,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
 
 -- 5. PROJECT_SUPERVISORS RELATIONSHIP TABLE
 CREATE TABLE IF NOT EXISTS public.project_supervisors (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
     supervisor_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -60,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.project_supervisors (
 
 -- 6. INVOICES TABLE
 CREATE TABLE IF NOT EXISTS public.invoices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE RESTRICT,
     client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE RESTRICT,
     invoice_number TEXT UNIQUE NOT NULL,
@@ -75,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.invoices (
 
 -- 7. EXPENSES TABLE
 CREATE TABLE IF NOT EXISTS public.expenses (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE RESTRICT,
     description TEXT NOT NULL,
     category TEXT NOT NULL CHECK (category IN ('materials', 'labor', 'equipment', 'permits', 'transportation', 'other')),
@@ -93,7 +94,7 @@ CREATE TABLE IF NOT EXISTS public.expenses (
 
 -- 8. ADVANCES (BALE) TABLE
 CREATE TABLE IF NOT EXISTS public.advances (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     worker_id UUID NOT NULL REFERENCES public.workers(id) ON DELETE RESTRICT,
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE RESTRICT,
     amount NUMERIC(10, 2) NOT NULL CHECK (amount > 0),
@@ -106,7 +107,7 @@ CREATE TABLE IF NOT EXISTS public.advances (
 
 -- 9. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.attendance (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     worker_id UUID NOT NULL REFERENCES public.workers(id) ON DELETE RESTRICT,
     project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE RESTRICT,
     date DATE NOT NULL,
@@ -122,7 +123,7 @@ CREATE TABLE IF NOT EXISTS public.attendance (
 
 -- 10. PAYROLL TABLE
 CREATE TABLE IF NOT EXISTS public.payroll (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     worker_id UUID NOT NULL REFERENCES public.workers(id) ON DELETE RESTRICT,
     period_start DATE NOT NULL,
     period_end DATE NOT NULL,
@@ -137,7 +138,7 @@ CREATE TABLE IF NOT EXISTS public.payroll (
 
 -- 11. TOOLS TABLE
 CREATE TABLE IF NOT EXISTS public.tools (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
     condition TEXT NOT NULL CHECK (condition IN ('excellent', 'good', 'fair', 'needs_repair', 'damaged')),
@@ -147,7 +148,7 @@ CREATE TABLE IF NOT EXISTS public.tools (
 
 -- 12. SMS LOGS TABLE
 CREATE TABLE IF NOT EXISTS public.sms_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_id UUID REFERENCES public.invoices(id) ON DELETE SET NULL,
     recipient TEXT NOT NULL,
     phone TEXT NOT NULL,

@@ -96,9 +96,9 @@ export default function ProjectDetailPage() {
   const totalExpenses = projExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const budgetConsumedPercent = Math.round((totalExpenses / (project.budget_estimate || 1)) * 100);
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProject(id, {
+    const updated = await updateProject(id, {
       name: editFormData.name,
       location: editFormData.location,
       budget_estimate: parseFloat(editFormData.budget_estimate),
@@ -106,13 +106,17 @@ export default function ProjectDetailPage() {
       start_date: editFormData.start_date,
       target_completion_date: editFormData.target_completion_date,
     });
-    setIsEditModalOpen(false);
+    if (updated) {
+      setIsEditModalOpen(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm(`Are you sure you want to remove ${project.name}?`)) {
-      deleteProject(id);
-      router.push('/projects');
+      const success = await deleteProject(id);
+      if (success) {
+        router.push('/projects');
+      }
     }
   };
 

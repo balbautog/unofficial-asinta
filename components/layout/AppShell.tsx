@@ -5,7 +5,8 @@ import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { useAuth } from '@/lib/auth/authContext';
-import { ShieldAlert } from 'lucide-react';
+import { useDataStore } from '@/lib/data/store';
+import { ShieldAlert, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 
@@ -14,12 +15,77 @@ interface AppShellProps {
   requireFounder?: boolean;
 }
 
+/** Full-screen state shown while the auth session / ledger is synchronizing. */
+const SyncState: React.FC<{ title: string; subtitle: string }> = ({ title, subtitle }) => (
+  <div className="min-h-screen bg-surface flex flex-col">
+    <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-4">
+      <div className="w-14 h-14 rounded-2xl bg-white border border-surface-border shadow-sm flex items-center justify-center">
+        <Loader2 className="w-7 h-7 text-navy animate-spin" />
+      </div>
+      <div className="text-center space-y-1">
+        <div className="text-base font-bold text-navy">{title}</div>
+        <div className="text-xs text-ink-secondary max-w-xs">{subtitle}</div>
+      </div>
+    </div>
+  </div>
+);
+
 export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = false }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { user, isFounder, isLoading } = useAuth();
+  const { user, isFounder, isLoading: authLoading } = useAuth();
+  const { isLoaded, isLoading: dataLoading, loadError, refresh } = useDataStore();
 
-  // If page strictly requires Founder role and user is Supervisor, show security access denied screen
-  if (!isLoading && requireFounder && !isFounder) {
+  // 1. Wait until the Supabase session has been resolved.
+  if (authLoading) {
+    return (
+      <SyncState
+        title="Verifying your session…"
+        subtitle="Validating your Supabase authentication credentials and BALE role."
+      />
+    );
+  }
+
+  // 2. Signed-in user: wait for the ledger to synchronize with Supabase.
+  if (user && !isLoaded) {
+    if (loadError) {
+      return (
+        <div className="min-h-screen bg-surface flex flex-col">
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-surface-border shadow-xl text-center space-y-4">
+              <div className="w-14 h-14 bg-amber-50 text-status-warning rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <h2 className="text-xl font-bold text-navy">Supabase Connection Problem</h2>
+              <p className="text-xs text-ink-secondary leading-relaxed text-left">{loadError}</p>
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={() => refresh()}
+                leftIcon={<RefreshCw className="w-4 h-4" />}
+              >
+                Retry Connection
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <SyncState
+        title="Synchronizing BALE ledger…"
+        subtitle={
+          dataLoading
+            ? 'Fetching live projects, invoices, expenses, attendance, and bale records from Supabase.'
+            : 'Preparing your workspace.'
+        }
+      />
+    );
+  }
+
+  // 3. If page strictly requires Founder role and user is Supervisor, show
+  //    security access denied screen.
+  if (requireFounder && !isFounder) {
     return (
       <div className="min-h-screen bg-surface flex flex-col">
         <Navbar onToggleMobileMenu={() => setIsMobileMenuOpen(true)} />
@@ -50,6 +116,20 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
     <div className="min-h-screen bg-surface flex flex-col antialiased">
       <Navbar onToggleMobileMenu={() => setIsMobileMenuOpen(true)} />
       <MobileNav isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
+
+      {loadError && (
+        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Some Supabase queries failed: {loadError}
+            </span>
+            <Button variant="outline" size="sm" onClick={() => refresh()}>
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex max-w-7xl w-full mx-auto">
         <Sidebar />

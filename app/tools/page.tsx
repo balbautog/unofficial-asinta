@@ -48,38 +48,42 @@ export default function ToolsPage() {
     return matchesSearch && matchesCondition;
   });
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
 
-    createTool({
+    const created = await createTool({
       name: formData.name,
       quantity: parseInt(formData.quantity) || 1,
       condition: formData.condition,
       project_id: formData.project_id || null,
     });
 
-    setIsAddModalOpen(false);
-    setFormData({ name: '', quantity: '1', condition: 'excellent', project_id: '' });
+    if (created) {
+      setIsAddModalOpen(false);
+      setFormData({ name: '', quantity: '1', condition: 'excellent', project_id: '' });
+    }
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTool) return;
 
-    updateTool(selectedTool.id, {
+    const updated = await updateTool(selectedTool.id, {
       name: formData.name,
       quantity: parseInt(formData.quantity) || 1,
       condition: formData.condition,
       project_id: formData.project_id || null,
     });
 
-    setIsEditModalOpen(false);
+    if (updated) {
+      setIsEditModalOpen(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Remove tool ${name}?`)) {
-      deleteTool(id);
+      await deleteTool(id);
     }
   };
 

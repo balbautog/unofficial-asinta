@@ -46,10 +46,12 @@ export default function AttendancePage() {
     : projects;
 
   // Terminal workflow state
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     accessibleProjects[0]?.id || projects[0]?.id || ''
   );
-  const [selectedDate, setSelectedDate] = useState<string>('2026-09-13'); // Today
+  const [selectedDate, setSelectedDate] = useState<string>(today);
   const [activeTab, setActiveTab] = useState<'terminal' | 'history'>('terminal');
 
   // Terminal active draft attendance records
@@ -151,11 +153,12 @@ export default function AttendancePage() {
     });
   };
 
-  const handleBatchSubmit = (e: React.FormEvent) => {
+  const handleBatchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProjectId) return;
-    setIsSubmitting(true);
+    if (!user) return;
 
+    setIsSubmitting(true);
     const batch = Object.entries(draftAttendance).map(([workerId, data]) => ({
       worker_id: workerId,
       project_id: selectedProjectId,
@@ -163,30 +166,36 @@ export default function AttendancePage() {
       status: data.status,
       hours_worked: data.hours_worked,
       notes: data.notes || null,
-      recorded_by: user?.id || 'usr-supervisor-1',
+      recorded_by: user.id,
     }));
 
-    recordAttendanceBatch(batch);
+    const success = await recordAttendanceBatch(batch);
     setIsSubmitting(false);
-    setSubmissionSuccess(true);
-    setTimeout(() => setSubmissionSuccess(false), 3000);
+    if (success) {
+      setSubmissionSuccess(true);
+      setTimeout(() => setSubmissionSuccess(false), 3000);
+    }
   };
 
-  const handleFounderOverrideSubmit = (e: React.FormEvent) => {
+  const handleFounderOverrideSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRecordForOverride) return;
 
-    updateAttendanceRecord(
+    const success = await updateAttendanceRecord(
       selectedRecordForOverride.id,
       {
         status: overrideStatus,
         hours_worked: parseFloat(overrideHours),
-        notes: overrideNotes ? `[Founder Override]: ${overrideNotes}` : '[Founder Override by Ar. Junel Buyagon]',
+        notes: overrideNotes
+          ? `[Founder Override]: ${overrideNotes}`
+          : `[Founder Override by ${user?.name || 'Founder'}]`,
       },
       true // set founder override = true
     );
 
-    setOverrideModalOpen(false);
+    if (success) {
+      setOverrideModalOpen(false);
+    }
   };
 
   // Filtered workers
@@ -265,25 +274,25 @@ export default function AttendancePage() {
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setSelectedDate('2026-09-13')}
+                onClick={() => setSelectedDate(today)}
                 className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all ${
-                  selectedDate === '2026-09-13'
+                  selectedDate === today
                     ? 'bg-navy text-white border-navy shadow-sm'
                     : 'bg-surface-inset text-navy border-surface-border hover:bg-slate-200'
                 }`}
               >
-                Today (Sep 13)
+                Today
               </button>
               <button
                 type="button"
-                onClick={() => setSelectedDate('2026-09-12')}
+                onClick={() => setSelectedDate(yesterday)}
                 className={`py-2 px-3 text-xs font-semibold rounded-xl border transition-all ${
-                  selectedDate === '2026-09-12'
+                  selectedDate === yesterday
                     ? 'bg-navy text-white border-navy shadow-sm'
                     : 'bg-surface-inset text-navy border-surface-border hover:bg-slate-200'
                 }`}
               >
-                Yesterday (Sep 12)
+                Yesterday
               </button>
               <Input
                 type="date"

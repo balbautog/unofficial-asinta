@@ -92,11 +92,11 @@ export default function InvoicesPage() {
     });
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.project_id || !formData.amount) return;
 
-    createInvoice({
+    const created = await createInvoice({
       invoice_number: formData.invoice_number || nextInvoiceNum,
       project_id: formData.project_id,
       client_id: formData.client_id,
@@ -108,25 +108,29 @@ export default function InvoicesPage() {
       notes: formData.notes,
     });
 
-    setIsCreateModalOpen(false);
-    setFormData({
-      invoice_number: `ASINTA-2026-00${invoices.length + 2}`,
-      project_id: '',
-      client_id: '',
-      amount: '',
-      issue_date: new Date().toISOString().split('T')[0],
-      due_date: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
-      notes: '',
-      status: 'pending',
-    });
+    if (created) {
+      setIsCreateModalOpen(false);
+      setFormData({
+        invoice_number: `ASINTA-2026-00${invoices.length + 2}`,
+        project_id: '',
+        client_id: '',
+        amount: '',
+        issue_date: new Date().toISOString().split('T')[0],
+        due_date: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+        notes: '',
+        status: 'pending',
+      });
+    }
   };
 
-  const handleRecordPayment = (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedInvoice || !paymentAmount) return;
-    recordInvoicePayment(selectedInvoice.id, parseFloat(paymentAmount));
-    setIsPaymentModalOpen(false);
-    setPaymentAmount('');
+    const success = await recordInvoicePayment(selectedInvoice.id, parseFloat(paymentAmount));
+    if (success) {
+      setIsPaymentModalOpen(false);
+      setPaymentAmount('');
+    }
   };
 
   const handleSendPhilSMS = async () => {
@@ -135,7 +139,7 @@ export default function InvoicesPage() {
 
     const client = clients.find((c) => c.id === selectedInvoice.client_id);
     const balance = selectedInvoice.amount - selectedInvoice.amount_paid;
-    const isOverdue = selectedInvoice.status === 'overdue' || new Date(selectedInvoice.due_date) < new Date('2026-09-13');
+    const isOverdue = selectedInvoice.status === 'overdue' || new Date(selectedInvoice.due_date) < new Date();
 
     const msg = generateInvoiceReminderSMS(
       client?.name || 'Valued Client',
@@ -145,13 +149,15 @@ export default function InvoicesPage() {
       isOverdue ? 'overdue' : 'upcoming'
     );
 
-    await sendSMS(client?.name || 'Client', client?.phone || '+63 917 842 1190', msg, selectedInvoice.id);
+    const sent = await sendSMS(client?.name || 'Client', client?.phone || '', msg, selectedInvoice.id);
     setSmsSending(false);
-    setSmsSuccess('PhilSMS reminder queued and delivered to client mobile.');
-    setTimeout(() => {
-      setIsSmsModalOpen(false);
-      setSmsSuccess(null);
-    }, 1800);
+    if (sent) {
+      setSmsSuccess('PhilSMS reminder queued and delivered to client mobile.');
+      setTimeout(() => {
+        setIsSmsModalOpen(false);
+        setSmsSuccess(null);
+      }, 1800);
+    }
   };
 
   return (

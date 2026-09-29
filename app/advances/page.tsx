@@ -74,11 +74,11 @@ export default function AdvancesPage() {
     .filter((a) => a.status === 'active' || a.status === 'partially_deducted')
     .reduce((sum, a) => sum + (a.amount - a.amount_deducted), 0);
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.worker_id || !formData.project_id || !formData.amount) return;
 
-    createAdvance({
+    const created = await createAdvance({
       worker_id: formData.worker_id,
       project_id: formData.project_id,
       amount: parseFloat(formData.amount),
@@ -86,23 +86,27 @@ export default function AdvancesPage() {
       date: formData.date,
     });
 
-    setIsAddModalOpen(false);
-    setFormData({
-      worker_id: '',
-      project_id: '',
-      amount: '',
-      reason: '',
-      date: new Date().toISOString().split('T')[0],
-    });
+    if (created) {
+      setIsAddModalOpen(false);
+      setFormData({
+        worker_id: '',
+        project_id: '',
+        amount: '',
+        reason: '',
+        date: new Date().toISOString().split('T')[0],
+      });
+    }
   };
 
-  const handleDeductSubmit = (e: React.FormEvent) => {
+  const handleDeductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAdvance || !deductionAmount) return;
 
-    recordAdvanceDeduction(selectedAdvance.id, parseFloat(deductionAmount));
-    setIsDeductModalOpen(false);
-    setDeductionAmount('');
+    const success = await recordAdvanceDeduction(selectedAdvance.id, parseFloat(deductionAmount));
+    if (success) {
+      setIsDeductModalOpen(false);
+      setDeductionAmount('');
+    }
   };
 
   return (
