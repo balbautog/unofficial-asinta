@@ -120,6 +120,7 @@ EMAIL_REPLY_TO=
 FIRM_CONTACT_NUMBER=
 
 PHILSMS_API_KEY=
+PHILSMS_SENDER_ID=PhilSMS
 
 SUPABASE_SERVICE_ROLE_KEY=
 CRON_SECRET=
@@ -139,6 +140,7 @@ AUTOMATIC_REMINDERS_ENABLED=false
 | `EMAIL_REPLY_TO` | Where client replies go | Recommended | No | A monitored mailbox | No (server only) |
 | `FIRM_CONTACT_NUMBER` | Phone number shown in emails | Optional | No | Your firm | No (server only) |
 | `PHILSMS_API_KEY` | Authorizes SMS sends | For live SMS | **Yes** | PhilSMS dashboard | **No — server only** |
+| `PHILSMS_SENDER_ID` | Sender ID shown on outgoing SMS | Optional (defaults to `PhilSMS`) | No | PhilSMS dashboard — custom values must be approved there first | **No — server only** |
 | `SUPABASE_SERVICE_ROLE_KEY` | Lets the scheduled cron job read/write reminder data | For automatic reminders | **Yes — bypasses all row security** | Supabase Dashboard → Project Settings → API | **No — server only, never in a browser** |
 | `CRON_SECRET` | Password that protects the reminder endpoint | For automatic reminders | **Yes** | You invent it (long random string) | **No — server only** |
 | `AUTOMATIC_REMINDERS_ENABLED` | Global on/off switch for automatic SMS | Yes (leave `false` until tested) | No | You set it | No (server only) |
@@ -262,8 +264,11 @@ your **domain host** (where your DNS records live):
 
 - Put your API key in `PHILSMS_API_KEY` (server environment only — never in
   the browser or the repository).
-- **Sender ID:** BALE sends with sender ID `ASINTA`. PhilSMS requires sender
-  IDs to be registered/approved in their dashboard first.
+- **Sender ID:** BALE sends with the sender ID configured in
+  `PHILSMS_SENDER_ID`, defaulting to `PhilSMS` (the account's default sender
+  ID) if the variable is not set. Custom sender IDs (e.g. `ASINTA`) must be
+  requested and approved in the PhilSMS dashboard first — otherwise the
+  gateway will reject the message.
 - **Simulation mode:** while `PHILSMS_API_KEY` is empty, the SMS page shows
   *Simulation mode*; messages are logged in BALE but **never leave the
   server**. This is the safe default for testing.

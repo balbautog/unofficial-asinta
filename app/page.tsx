@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth/authContext';
 import { canRoleAccessPath, getSafeRedirectPath, type AppRole } from '@/lib/auth/routes';
 import { Badge } from '@/components/ui/Badge';
@@ -25,6 +25,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [redirectNotice, setRedirectNotice] = useState<string | null>(null);
@@ -125,13 +126,24 @@ export default function LoginPage() {
             />
             <Input
               label="Password"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Enter your account password"
               autoComplete="current-password"
               required
               leftIcon={<Lock className="w-4 h-4" />}
+              rightIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((previous) => !previous)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="text-ink-muted hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30 rounded-md p-0.5 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              }
             />
             <Button
               type="submit"
