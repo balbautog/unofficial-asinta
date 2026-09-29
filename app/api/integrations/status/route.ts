@@ -25,6 +25,7 @@ export async function GET() {
     {
       groqConfigured: Boolean(process.env.GROQ_API_KEY),
       philsmsConfigured: Boolean(process.env.PHILSMS_API_KEY),
+      philsmsSenderId: process.env.PHILSMS_SENDER_ID || 'PhilSMS',
       supabaseConfigured: Boolean(
         process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       ),

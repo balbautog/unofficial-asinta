@@ -14,6 +14,7 @@ import { TestEmailCard } from '@/components/email/TestEmailCard';
 interface IntegrationStatus {
   groqConfigured: boolean;
   philsmsConfigured: boolean;
+  philsmsSenderId?: string;
   supabaseConfigured: boolean;
   smtpConfigured: boolean;
   automaticRemindersEnabled: boolean;
@@ -26,6 +27,9 @@ export default function SettingsPage() {
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
+  const [testPhone, setTestPhone] = useState('');
+  const [isTestingSms, setIsTestingSms] = useState(false);
+  const [smsTestResult, setSmsTestResult] = useState<{ accepted?: boolean; error?: string; note?: string; providerMessageId?: string | null } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -54,6 +58,26 @@ export default function SettingsPage() {
       active = false;
     };
   }, []);
+
+  const handleSmsTest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isTestingSms) return;
+    setIsTestingSms(true);
+    setSmsTestResult(null);
+    try {
+      const response = await fetch('/api/integrations/philsms-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: testPhone }),
+      });
+      const result = await response.json();
+      setSmsTestResult(result);
+    } catch {
+      setSmsTestResult({ error: 'Could not contact the BALE server. No result was confirmed.' });
+    } finally {
+      setIsTestingSms(false);
+    }
+  };
 
   const handleResyncData = async () => {
     setIsResyncing(true);
@@ -209,11 +233,38 @@ export default function SettingsPage() {
                     </Badge>
                   </div>
                   <div className="text-ink-secondary">
-                    Sender ID: <span className="font-mono text-navy font-semibold">ASINTA</span>
+                    Sender ID: <span className="font-mono text-navy font-semibold">{integrationStatus?.philsmsSenderId || 'PhilSMS'}</span>
                   </div>
                   <div className="text-[11px] text-ink-muted">
-                    Direct SMS reminders for client invoice due dates.
+                    Configured means the key exists; it does not mean a message was accepted or delivered.
                   </div>
+                  <form onSubmit={handleSmsTest} className="space-y-2 pt-2 border-t border-surface-border">
+                    <label htmlFor="philsms-test-phone" className="block font-bold text-navy">Send a real test SMS to your phone</label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        id="philsms-test-phone"
+                        type="tel"
+                        autoComplete="tel"
+                        required
+                        value={testPhone}
+                        onChange={(event) => setTestPhone(event.target.value)}
+                        placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                        className="min-w-0 flex-1 rounded-xl border border-surface-border bg-white px-3 py-2 text-xs"
+                      />
+                      <Button type="submit" size="sm" isLoading={isTestingSms} disabled={!integrationStatus?.philsmsConfigured || isTestingSms || !testPhone.trim()}>
+                        Send Test SMS
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-ink-muted">This sends a billable message. Use a number you control. Gateway acceptance is not the same as delivery.</p>
+                    {smsTestResult && (
+                      <div role="status" className={`rounded-lg border p-3 text-[11px] ${smsTestResult.accepted ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
+                        <strong>{smsTestResult.accepted ? 'PhilSMS API accepted the test' : 'Test not confirmed'}</strong>
+                        {smsTestResult.error && <div className="mt-1">{smsTestResult.error}</div>}
+                        {smsTestResult.providerMessageId && <div className="mt-1">Provider message ID: <span className="font-mono">{smsTestResult.providerMessageId}</span></div>}
+                        {smsTestResult.note && <div className="mt-1">{smsTestResult.note}</div>}
+                      </div>
+                    )}
+                  </form>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-surface-inset/50 border border-surface-border space-y-2">
