@@ -66,10 +66,12 @@ export default function PayrollPage() {
   const totalNetDisbursement = filteredPayroll.reduce((sum, p) => sum + Number(p.net_pay || 0), 0);
   const totalBaleRecovered = filteredPayroll.reduce((sum, p) => sum + Number(p.bale_deduction || 0), 0);
 
-  const handleGenerateSubmit = (e: React.FormEvent) => {
+  const handleGenerateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    createPayrollRun(periodStart, periodEnd);
-    setIsGenerateModalOpen(false);
+    const created = await createPayrollRun(periodStart, periodEnd);
+    if (created) {
+      setIsGenerateModalOpen(false);
+    }
   };
 
   return (

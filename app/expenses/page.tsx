@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
+import { useToast } from '@/components/ui/Toast';
+import { createClient } from '@/lib/supabase/client';
 import { Expense, ExpenseCategory } from '@/types';
 import {
   CreditCard,
@@ -23,6 +25,7 @@ import {
   Check,
   X,
   Bot,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -38,10 +41,11 @@ export default function ExpensesPage() {
     projects,
     createExpense,
     updateExpense,
-    confirmAIExpense,
     createAdvance,
     workers,
   } = useDataStore();
+  const { showToast } = useToast();
+  const supabase = createClient();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -66,6 +70,10 @@ export default function ExpensesPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiResult, setAiResult] = useState<AICategorizationResult | null>(null);
   const [aiAccepted, setAiAccepted] = useState(false);
+
+  // Receipt upload / submission state
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatPHP = (amount: number) =>
     `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -100,9 +108,13 @@ export default function ExpensesPage() {
         const data: AICategorizationResult = await res.json();
         setAiResult(data);
         setAiAccepted(false);
+      } else {
+        const body = await res.json().catch(() => null);
+        showToast('error', body?.error || `AI categorization failed (HTTP ${res.status}).`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('AI categorization error:', e);
+      showToast('error', `AI categorization request failed: ${e?.message || 'network error'}`);
     } finally {
       setIsAnalyzing(false);
     }
@@ -120,13 +132,18 @@ export default function ExpensesPage() {
     setAiAccepted(true);
   };
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.project_id || !formData.description || !formData.amount) return;
+    if (!user) {
+      showToast('error', 'You must be signed in to record expenses.');
+      return;
+    }
 
+    setIsSubmitting(true);
     const amountNum = parseFloat(formData.amount);
 
-    const newExp = createExpense({
+    const newExp = await createExpense({
       project_id: formData.project_id,
       description: formData.description,
       category: formData.category,
@@ -138,53 +155,86 @@ export default function ExpensesPage() {
       ai_bale_detection: aiResult?.isBale || false,
       ai_approval_suggestion: aiResult?.approvalRouting || null,
       ai_confirmed: true, // Founder explicitly confirmed by submitting
-      created_by: user?.id || 'usr-founder-1',
+      created_by: user.id,
     });
 
-    // If Bale was detected & confirmed, automatically create a linked Bale entry in Advances ledger
-    if (aiResult?.isBale) {
-      // Find worker mentioned in description or default to first worker
-      const lower = formData.description.toLowerCase();
-      const matchedWorker = workers.find((w) => lower.includes(w.name.toLowerCase().split(' ')[0]));
-      const targetWorkerId = matchedWorker ? matchedWorker.id : workers[0].id;
+    if (newExp) {
+      // If Bale was detected & confirmed, automatically create a linked Bale entry in Advances ledger
+      if (aiResult?.isBale) {
+        // Find worker mentioned in description or default to first worker
+        const lower = formData.description.toLowerCase();
+        const matchedWorker = workers.find((w) => lower.includes(w.name.toLowerCase().split(' ')[0]));
+        const targetWorkerId = matchedWorker ? matchedWorker.id : workers[0]?.id;
 
-      createAdvance({
-        worker_id: targetWorkerId,
-        project_id: formData.project_id,
-        amount: amountNum,
-        reason: formData.description,
-        date: formData.expense_date,
+        if (targetWorkerId) {
+          await createAdvance({
+            worker_id: targetWorkerId,
+            project_id: formData.project_id,
+            amount: amountNum,
+            reason: formData.description,
+            date: formData.expense_date,
+          });
+        }
+      }
+
+      setIsAddModalOpen(false);
+      setFormData({
+        project_id: '',
+        description: '',
+        amount: '',
+        category: 'materials',
+        expense_date: new Date().toISOString().split('T')[0],
+        notes: '',
+        receipt_url: null,
       });
+      setAiResult(null);
+      setAiAccepted(false);
     }
-
-    setIsAddModalOpen(false);
-    setFormData({
-      project_id: '',
-      description: '',
-      amount: '',
-      category: 'materials',
-      expense_date: new Date().toISOString().split('T')[0],
-      notes: '',
-      receipt_url: null,
-    });
-    setAiResult(null);
-    setAiAccepted(false);
+    setIsSubmitting(false);
   };
 
-  // Mock receipt upload
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload the receipt photo directly to the Supabase Storage `receipts`
+  // bucket and persist its public URL on expenses.receipt_url.
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // In real supabase environment this uploads to Supabase Storage bucket 'receipts'
-      const sampleUrls = [
-        'https://images.unsplash.com/photo-1541888946425-d0fbb180c5f5?w=600&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=80',
-        'https://images.unsplash.com/photo-1581094288338-2314dddb7ece?w=600&auto=format&fit=crop&q=80',
-      ];
-      setFormData({
-        ...formData,
-        receipt_url: sampleUrls[Math.floor(Math.random() * sampleUrls.length)],
-      });
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('error', 'Receipt must be an image file (JPG, PNG, WEBP).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('error', 'Receipt photo must be smaller than 5MB.');
+      return;
+    }
+
+    setIsUploadingReceipt(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `${user?.id || 'unattributed'}/${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('receipts')
+        .upload(path, file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: file.type,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('receipts').getPublicUrl(path);
+      setFormData((prev) => ({ ...prev, receipt_url: data.publicUrl }));
+      showToast('success', 'Receipt photo uploaded to Supabase Storage.');
+    } catch (err: any) {
+      console.error('Receipt upload failed:', err);
+      showToast('error', `Receipt upload failed: ${err?.message || 'unknown storage error'}`);
+    } finally {
+      setIsUploadingReceipt(false);
+      // Allow re-selecting the same file after a failure.
+      e.target.value = '';
     }
   };
 
@@ -474,14 +524,24 @@ export default function ExpensesPage() {
                 Receipt / Invoice Photo
               </label>
               <label className="flex items-center justify-center gap-2 p-2.5 rounded-xl bg-surface-inset border border-surface-border hover:bg-slate-200 cursor-pointer text-xs font-semibold text-navy transition-all shadow-[inset_1px_1px_2px_rgba(11,31,58,0.05)]">
-                <Camera className="w-4 h-4" />
-                <span>{formData.receipt_url ? 'Receipt Attached ✓' : 'Attach Photo'}</span>
+                {isUploadingReceipt ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Uploading to Supabase…</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4" />
+                    <span>{formData.receipt_url ? 'Receipt Attached ✓' : 'Attach Photo'}</span>
+                  </>
+                )}
                 <input
                   type="file"
                   accept="image/*"
                   capture="environment"
                   className="hidden"
                   onChange={handleReceiptUpload}
+                  disabled={isUploadingReceipt}
                 />
               </label>
             </div>
@@ -496,10 +556,10 @@ export default function ExpensesPage() {
           />
 
           <div className="pt-4 flex justify-end space-x-2">
-            <Button variant="secondary" onClick={() => setIsAddModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setIsAddModalOpen(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" isLoading={isSubmitting}>
               Confirm & Save Expense
             </Button>
           </div>

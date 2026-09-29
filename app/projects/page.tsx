@@ -68,11 +68,11 @@ export default function ProjectsPage() {
   const formatPHP = (amount: number) =>
     `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.client_id || !formData.budget_estimate) return;
 
-    createProject({
+    const created = await createProject({
       name: formData.name,
       client_id: formData.client_id,
       location: formData.location || 'Batangas',
@@ -82,16 +82,18 @@ export default function ProjectsPage() {
       target_completion_date: formData.target_completion_date,
     });
 
-    setIsCreateModalOpen(false);
-    setFormData({
-      name: '',
-      client_id: '',
-      location: '',
-      budget_estimate: '',
-      status: 'active',
-      start_date: new Date().toISOString().split('T')[0],
-      target_completion_date: '2026-12-31',
-    });
+    if (created) {
+      setIsCreateModalOpen(false);
+      setFormData({
+        name: '',
+        client_id: '',
+        location: '',
+        budget_estimate: '',
+        status: 'active',
+        start_date: new Date().toISOString().split('T')[0],
+        target_completion_date: '2026-12-31',
+      });
+    }
   };
 
   return (

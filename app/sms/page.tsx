@@ -53,8 +53,9 @@ export default function SMSPage() {
     if (!formData.recipient || !formData.phone || !formData.message) return;
 
     setIsSending(true);
-    await sendSMS(formData.recipient, formData.phone, formData.message, formData.invoice_id || undefined);
+    const sent = await sendSMS(formData.recipient, formData.phone, formData.message, formData.invoice_id || undefined);
     setIsSending(false);
+    if (!sent) return;
     setSuccessNotice(true);
     setTimeout(() => {
       setIsComposeModalOpen(false);

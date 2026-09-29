@@ -48,11 +48,11 @@ export default function ClientsPage() {
       c.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name) return;
 
-    createClient({
+    const created = await createClient({
       name: formData.name,
       contact_person: formData.contact_person || formData.name,
       phone: formData.phone || '+63 917 000 0000',
@@ -60,21 +60,25 @@ export default function ClientsPage() {
       address: formData.address || 'Batangas',
     });
 
-    setIsAddModalOpen(false);
-    setFormData({ name: '', contact_person: '', phone: '', email: '', address: '' });
+    if (created) {
+      setIsAddModalOpen(false);
+      setFormData({ name: '', contact_person: '', phone: '', email: '', address: '' });
+    }
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedClient) return;
 
-    updateClient(selectedClient.id, formData);
-    setIsEditModalOpen(false);
+    const updated = await updateClient(selectedClient.id, formData);
+    if (updated) {
+      setIsEditModalOpen(false);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Remove client ${name}?`)) {
-      deleteClient(id);
+      await deleteClient(id);
     }
   };
 

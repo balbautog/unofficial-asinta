@@ -1,0 +1,86 @@
+'use client';
+
+import React, { createContext, useCallback, useContext, useState } from 'react';
+import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
+
+export type ToastType = 'success' | 'error' | 'info';
+
+interface ToastItem {
+  id: number;
+  type: ToastType;
+  message: string;
+}
+
+interface ToastContextType {
+  showToast: (type: ToastType, message: string) => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
+
+let nextToastId = 1;
+
+export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const showToast = useCallback(
+    (type: ToastType, message: string) => {
+      const id = nextToastId++;
+      setToasts((prev) => [...prev, { id, type, message }].slice(-4));
+      setTimeout(() => dismissToast(id), type === 'error' ? 8000 : 4500);
+    },
+    [dismissToast]
+  );
+
+  const value = React.useMemo(() => ({ showToast }), [showToast]);
+
+  return (
+    <ToastContext.Provider value={value}>
+      {children}
+      {/* Toast viewport */}
+      <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 w-[min(92vw,380px)]">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            role="status"
+            className={`flex items-start gap-2.5 p-3.5 rounded-2xl border shadow-lg text-xs font-medium animate-in fade-in slide-in-from-bottom-2 ${
+              toast.type === 'error'
+                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                : toast.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-white border-surface-border text-navy'
+            }`}
+          >
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500 mt-0.5" />
+            ) : toast.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+            ) : (
+              <Info className="w-4 h-4 shrink-0 text-navy mt-0.5" />
+            )}
+            <span className="leading-relaxed flex-1">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => dismissToast(toast.id)}
+              aria-label="Dismiss notification"
+              className="p-0.5 rounded-lg hover:bg-black/5 text-current"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+};
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+};
