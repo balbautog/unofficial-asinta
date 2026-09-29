@@ -8,11 +8,15 @@ import { Building2, Shield, Bot, Database, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { TemplateEditorCard } from '@/components/email/TemplateEditorCard';
+import { TestEmailCard } from '@/components/email/TestEmailCard';
 
 interface IntegrationStatus {
   groqConfigured: boolean;
   philsmsConfigured: boolean;
   supabaseConfigured: boolean;
+  smtpConfigured: boolean;
+  automaticRemindersEnabled: boolean;
 }
 
 export default function SettingsPage() {
@@ -40,6 +44,8 @@ export default function SettingsPage() {
             groqConfigured: false,
             philsmsConfigured: false,
             supabaseConfigured: false,
+            smtpConfigured: false,
+            automaticRemindersEnabled: false,
           });
         }
       });
@@ -209,10 +215,62 @@ export default function SettingsPage() {
                     Direct SMS reminders for client invoice due dates.
                   </div>
                 </div>
+
+                <div className="p-4 rounded-2xl bg-surface-inset/50 border border-surface-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-navy">SMTP Email (Nodemailer)</span>
+                    <Badge
+                      variant={integrationStatus?.smtpConfigured ? 'success' : 'warning'}
+                      size="sm"
+                    >
+                      {!integrationStatus
+                        ? 'Checking'
+                        : integrationStatus.smtpConfigured
+                          ? 'Configured'
+                          : 'Not configured'}
+                    </Badge>
+                  </div>
+                  <div className="text-ink-secondary">
+                    Request for Payment emails and SMTP test messages.
+                  </div>
+                  <div className="text-[11px] text-ink-muted">
+                    Credentials are server-side environment variables and are never displayed
+                    here. See <span className="font-mono">docs/COMMUNICATIONS_SETUP.md</span>.
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-surface-inset/50 border border-surface-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-navy">Automatic SMS Reminders</span>
+                    <Badge
+                      variant={integrationStatus?.automaticRemindersEnabled ? 'success' : 'neutral'}
+                      size="sm"
+                    >
+                      {!integrationStatus
+                        ? 'Checking'
+                        : integrationStatus.automaticRemindersEnabled
+                          ? 'Enabled globally'
+                          : 'Disabled (default)'}
+                    </Badge>
+                  </div>
+                  <div className="text-ink-secondary">
+                    Scheduled reminders run only when enabled globally AND per invoice.
+                  </div>
+                  <div className="text-[11px] text-ink-muted">
+                    Controlled by <span className="font-mono">AUTOMATIC_REMINDERS_ENABLED</span> on
+                    the server; sends Mon–Sat 8AM–6PM Asia/Manila only.
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
+
+        {/* Email Templates (Founder only) */}
+        {isFounder && <TemplateEditorCard />}
+
+        {/* SMTP Test Email (Founder only) */}
+        {isFounder && <TestEmailCard />}
 
         {/* Database & Sync Controls */}
         <Card>

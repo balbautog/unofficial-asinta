@@ -108,7 +108,7 @@ interface DataStoreContextType {
   deleteTool: (id: string) => Promise<boolean>;
 
   // SMS Actions
-  sendSMS: (recipient: string, phone: string, message: string, invoiceId?: string) => Promise<boolean>;
+  sendSMS: (params: { invoiceId?: string; clientId?: string; message: string }) => Promise<boolean>;
 
   // Analytics
   getFounderMetrics: () => {
@@ -161,6 +161,8 @@ const mapInvoice = (row: any): Invoice => ({
   ...row,
   amount: toNumber(row.amount),
   amount_paid: toNumber(row.amount_paid),
+  automatic_reminders_enabled: Boolean(row.automatic_reminders_enabled),
+  reminders_paused_until: row.reminders_paused_until ?? null,
 });
 
 const mapExpense = (row: any): Expense => ({
@@ -803,51 +805,46 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   // --- SMS ACTIONS ---
-  const sendSMS = async (
-    recipient: string,
-    phone: string,
-    message: string,
-    invoiceId?: string
-  ): Promise<boolean> => {
+  const sendSMS = async (params: {
+    invoiceId?: string;
+    clientId?: string;
+    message: string;
+  }): Promise<boolean> => {
     try {
+      // The server resolves the authoritative recipient (invoice → client or
+      // client record), normalizes the phone number, dispatches through the
+      // gateway, and records the honest outcome in sms_logs itself.
       const res = await fetch('/api/sms/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient, phone, message, invoiceId }),
+        body: JSON.stringify(params),
       });
 
+      const result: {
+        success?: boolean;
+        simulated?: boolean;
+        error?: string | null;
+        log?: SMSLog | null;
+      } | null = await res.json().catch(() => null);
+
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error || `SMS gateway responded with status ${res.status}`);
+        throw new Error(result?.error || `SMS gateway responded with status ${res.status}`);
       }
 
-      const result: { success: boolean; simulated?: boolean; error?: string } = await res.json();
-      const status: SMSLog['status'] = result.success ? (result.simulated ? 'pending' : 'delivered') : 'failed';
+      if (result?.log) {
+        const logRow = result.log;
+        setSmsLogs((prev) => [logRow, ...prev.filter((l) => l.id !== logRow.id)]);
+      }
 
-      const row = await runMutation('Log SMS message', (db) =>
-        db
-          .from('sms_logs')
-          .insert({
-            invoice_id: invoiceId || null,
-            recipient,
-            phone,
-            message,
-            status,
-          })
-          .select()
-          .single()
-      );
-      if (!row) return false;
-
-      setSmsLogs((prev) => [row as SMSLog, ...prev]);
-
-      if (result.simulated) {
+      if (result?.simulated) {
         showToast(
           'info',
           'PHILSMS_API_KEY is not configured — the message was logged in simulation mode and has not left the server.'
         );
+      } else if (!result?.success) {
+        showToast('error', `SMS dispatch failed: ${result?.error || 'gateway error'}`);
       }
-      return result.success;
+      return Boolean(result?.success);
     } catch (e: any) {
       showToast('error', `SMS dispatch failed: ${e?.message || 'network error'}`);
       return false;

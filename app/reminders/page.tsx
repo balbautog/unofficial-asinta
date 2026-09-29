@@ -1,0 +1,485 @@
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { AppShell } from '@/components/layout/AppShell';
+import { useDataStore } from '@/lib/data/store';
+import {
+  BellRing,
+  CheckCircle2,
+  PauseCircle,
+  PlayCircle,
+  Send,
+  XCircle,
+} from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { Textarea } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
+import { createClient } from '@/lib/supabase/client';
+import { buildReminderSMS, estimateSMSSegments } from '@/lib/sms/templates';
+import { formatPeso, formatDatePH } from '@/lib/email/format';
+import {
+  daysBetween,
+  getManilaClock,
+  nextEligibleReminder,
+  type ScheduledReminderType,
+} from '@/lib/reminders/scheduler';
+import type { Invoice } from '@/types';
+
+interface IntegrationStatus {
+  philsmsConfigured: boolean;
+  automaticRemindersEnabled: boolean;
+}
+
+const TYPE_LABELS: Record<ScheduledReminderType, string> = {
+  upcoming: 'Upcoming',
+  due_today: 'Due today',
+  overdue: 'Overdue',
+  follow_up: 'Follow-up',
+};
+
+const TYPE_VARIANTS: Record<ScheduledReminderType, 'info' | 'warning' | 'danger' | 'neutral'> = {
+  upcoming: 'info',
+  due_today: 'warning',
+  overdue: 'danger',
+  follow_up: 'danger',
+};
+
+function queueReminderType(dueDate: string, todayIso: string): ScheduledReminderType {
+  const daysPastDue = daysBetween(dueDate, todayIso);
+  if (daysPastDue < 0) return 'upcoming';
+  if (daysPastDue === 0) return 'due_today';
+  if (daysPastDue <= 7) return 'overdue';
+  return 'follow_up';
+}
+
+export default function RemindersPage() {
+  const { invoices, clients, projects, smsLogs, sendSMS, updateInvoice } = useDataStore();
+  const supabase = useMemo(() => createClient(), []);
+
+  const todayIso = getManilaClock().dateIso;
+  const [emailDates, setEmailDates] = useState<Record<string, string>>({});
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState<IntegrationStatus | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // Edit-and-approve modal
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
+  const [editMessage, setEditMessage] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [sentNotice, setSentNotice] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/integrations/status', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (active && data) setStatus(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const now = Date.now();
+
+  const isPaused = (inv: Invoice) =>
+    Boolean(inv.reminders_paused_until && new Date(inv.reminders_paused_until).getTime() > now);
+
+  // Queue: unpaid, not cancelled/draft, positive balance, approaching (≤3 days),
+  // due today, or overdue. Paused invoices are listed separately below.
+  const queue = invoices
+    .filter((inv) => {
+      if (inv.status === 'paid' || inv.status === 'cancelled' || inv.status === 'draft') return false;
+      if (inv.amount - inv.amount_paid <= 0) return false;
+      if (dismissed.has(inv.id)) return false;
+      if (isPaused(inv)) return false;
+      return daysBetween(inv.due_date, todayIso) >= -3;
+    })
+    .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
+
+  const pausedInvoices = invoices.filter(
+    (inv) =>
+      isPaused(inv) &&
+      inv.status !== 'paid' &&
+      inv.status !== 'cancelled' &&
+      inv.amount - inv.amount_paid > 0
+  );
+
+  // Latest successful Request for Payment email per queued invoice.
+  useEffect(() => {
+    const ids = queue.map((inv) => inv.id);
+    if (ids.length === 0) return;
+    let active = true;
+
+    supabase
+      .from('email_logs')
+      .select('invoice_id, sent_at')
+      .in('invoice_id', ids)
+      .eq('template_type', 'initial_request')
+      .in('status', ['accepted', 'delivered'])
+      .order('sent_at', { ascending: false })
+      .then(({ data }: { data: Array<{ invoice_id: string; sent_at: string | null }> | null }) => {
+        if (!active || !data) return;
+        const latest: Record<string, string> = {};
+        for (const row of data) {
+          if (row.sent_at && !latest[row.invoice_id]) latest[row.invoice_id] = row.sent_at;
+        }
+        setEmailDates(latest);
+      });
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoices.length, supabase]);
+
+  const latestSmsDate = (invoiceId: string): string | null => {
+    const log = smsLogs.find(
+      (l) => l.invoice_id === invoiceId && (l.status === 'sent' || l.status === 'delivered')
+    );
+    return log?.sent_at || null;
+  };
+
+  const buildMessageFor = (inv: Invoice): string => {
+    const client = clients.find((c) => c.id === inv.client_id);
+    const project = projects.find((p) => p.id === inv.project_id);
+    return buildReminderSMS({
+      contactPerson: client?.contact_person,
+      companyName: client?.name,
+      invoiceNumber: inv.invoice_number,
+      projectName: project?.name || 'your project',
+      outstandingBalance: inv.amount - inv.amount_paid,
+      dueDate: inv.due_date,
+      paymentRequestSentDate: emailDates[inv.id] || null,
+    });
+  };
+
+  const handleApproveAndSend = async (inv: Invoice, message: string) => {
+    setSendingId(inv.id);
+    const sent = await sendSMS({ invoiceId: inv.id, message });
+    setSendingId(null);
+    if (sent && editInvoice?.id === inv.id) {
+      setSentNotice(true);
+      setTimeout(() => {
+        setEditInvoice(null);
+        setSentNotice(false);
+        setConfirmed(false);
+      }, 1400);
+    }
+  };
+
+  const handlePause = async (inv: Invoice, days: number) => {
+    setTogglingId(inv.id);
+    await updateInvoice(inv.id, {
+      reminders_paused_until: new Date(Date.now() + days * 86_400_000).toISOString(),
+    });
+    setTogglingId(null);
+  };
+
+  const handleResume = async (inv: Invoice) => {
+    setTogglingId(inv.id);
+    await updateInvoice(inv.id, { reminders_paused_until: null });
+    setTogglingId(null);
+  };
+
+  const handleToggleAutomatic = async (inv: Invoice) => {
+    setTogglingId(inv.id);
+    await updateInvoice(inv.id, {
+      automatic_reminders_enabled: !inv.automatic_reminders_enabled,
+    });
+    setTogglingId(null);
+  };
+
+  return (
+    <AppShell requireFounder={true}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-surface-border/60">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-navy uppercase tracking-widest">
+                Collections Control
+              </span>
+              <span className="text-xs text-ink-muted">·</span>
+              <span className="text-xs text-ink-secondary">Founder approval required</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-navy tracking-tight mt-1">
+              Reminder Approval Queue
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant={status?.automaticRemindersEnabled ? 'success' : 'neutral'} size="sm">
+              {status === null
+                ? 'Checking automation…'
+                : status.automaticRemindersEnabled
+                  ? 'Automatic reminders: ENABLED globally'
+                  : 'Automatic reminders: disabled (manual approval only)'}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-surface-inset/60 border border-surface-border text-xs text-ink-secondary leading-relaxed">
+          Invoices approaching their due date, due today, or overdue with an outstanding balance
+          appear here. Paid, cancelled, zero-balance, and paused invoices are excluded. Every
+          message requires Founder approval unless automatic sending is explicitly enabled both
+          globally and per invoice. Automatic sends run Monday–Saturday, 8:00 AM–6:00 PM
+          Asia/Manila only.
+        </div>
+
+        {/* Queue */}
+        <div className="space-y-4">
+          {queue.length === 0 && (
+            <div className="p-12 text-center text-xs text-ink-secondary bg-white rounded-3xl border border-surface-border">
+              <BellRing className="w-8 h-8 mx-auto mb-3 text-ink-muted" />
+              No invoices currently need a reminder. Approaching, due, and overdue invoices with a
+              balance will appear here automatically.
+            </div>
+          )}
+
+          {queue.map((inv) => {
+            const client = clients.find((c) => c.id === inv.client_id);
+            const project = projects.find((p) => p.id === inv.project_id);
+            const balance = inv.amount - inv.amount_paid;
+            const type = queueReminderType(inv.due_date, todayIso);
+            const preview = buildMessageFor(inv);
+            const estimate = estimateSMSSegments(preview);
+            const next = nextEligibleReminder(inv.due_date, todayIso);
+            const lastSms = latestSmsDate(inv.id);
+
+            return (
+              <div
+                key={inv.id}
+                className="bg-white rounded-3xl border border-surface-border shadow-[6px_6px_18px_rgba(11,31,58,0.06),-6px_-6px_18px_rgba(255,255,255,0.95)] p-5 space-y-4"
+              >
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="font-mono font-bold text-sm text-navy">{inv.invoice_number}</span>
+                      <Badge variant={TYPE_VARIANTS[type]} size="sm">
+                        {TYPE_LABELS[type]}
+                      </Badge>
+                      {inv.automatic_reminders_enabled && (
+                        <Badge variant="info" size="sm">Automatically scheduled</Badge>
+                      )}
+                    </div>
+                    <div className="text-xs text-ink-secondary">
+                      <span className="font-semibold text-navy">{client?.name}</span>
+                      {client?.contact_person ? ` · ${client.contact_person}` : ''} ·{' '}
+                      {project?.name}
+                    </div>
+                    <div className="text-xs text-ink-secondary">
+                      Balance{' '}
+                      <span className="font-bold text-status-danger">{formatPeso(balance)}</span> ·
+                      Due <span className="font-semibold text-navy">{formatDatePH(inv.due_date)}</span>
+                    </div>
+                    <div className="text-[11px] text-ink-muted">
+                      Latest successful email:{' '}
+                      {emailDates[inv.id] ? formatDatePH(emailDates[inv.id]) : 'none on record'} ·
+                      Latest SMS: {lastSms ? formatDatePH(lastSms) : 'none'} · Next scheduled
+                      reminder: {formatDatePH(next.dateIso)} ({TYPE_LABELS[next.type]})
+                    </div>
+                  </div>
+
+                  <div className="flex items-center flex-wrap gap-2 shrink-0">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setEditInvoice(inv);
+                        setEditMessage(preview);
+                        setConfirmed(false);
+                        setSentNotice(false);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setEditInvoice(inv);
+                        setEditMessage(preview);
+                        setConfirmed(false);
+                        setSentNotice(false);
+                      }}
+                      leftIcon={<Send className="w-3.5 h-3.5" />}
+                    >
+                      Approve &amp; Send
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDismissed((prev) => new Set([...prev, inv.id]))}
+                      leftIcon={<XCircle className="w-3.5 h-3.5" />}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handlePause(inv, 7)}
+                      isLoading={togglingId === inv.id}
+                      leftIcon={<PauseCircle className="w-3.5 h-3.5" />}
+                    >
+                      Pause 7 days
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-ink-primary leading-relaxed">
+                  {preview}
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-ink-secondary">
+                  <span>
+                    {estimate.characterCount} characters · {estimate.encoding} · est.{' '}
+                    {estimate.segments} segment{estimate.segments === 1 ? '' : 's'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleAutomatic(inv)}
+                    className="text-navy font-semibold hover:underline text-left"
+                    disabled={togglingId === inv.id}
+                  >
+                    {inv.automatic_reminders_enabled
+                      ? 'Disable automatic reminders for this invoice'
+                      : 'Enable automatic reminders for this invoice'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Paused invoices */}
+        {pausedInvoices.length > 0 && (
+          <div className="bg-white rounded-3xl border border-surface-border overflow-hidden">
+            <div className="p-4 border-b border-surface-border/60">
+              <h3 className="font-bold text-navy text-sm">Paused Reminders</h3>
+            </div>
+            <div className="divide-y divide-surface-border/70">
+              {pausedInvoices.map((inv) => {
+                const client = clients.find((c) => c.id === inv.client_id);
+                return (
+                  <div key={inv.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div>
+                      <span className="font-mono font-bold text-navy">{inv.invoice_number}</span>
+                      <span className="text-ink-secondary"> · {client?.name} · </span>
+                      <Badge variant="warning" size="sm">Paused</Badge>
+                      <span className="text-ink-muted">
+                        {' '}until {formatDatePH(inv.reminders_paused_until || undefined)}
+                      </span>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleResume(inv)}
+                      isLoading={togglingId === inv.id}
+                      leftIcon={<PlayCircle className="w-3.5 h-3.5" />}
+                    >
+                      Resume Reminders
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* EDIT / APPROVE MODAL */}
+      <Modal
+        isOpen={Boolean(editInvoice)}
+        onClose={() => setEditInvoice(null)}
+        title="Approve Payment Reminder SMS"
+        description="Review and edit the reminder before Founder-approved dispatch."
+        maxWidth="xl"
+      >
+        {editInvoice && (
+          <div className="space-y-4 text-xs">
+            {sentNotice ? (
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-bold flex items-center justify-center space-x-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <span>Reminder handed to the gateway — check the SMS log for its status.</span>
+              </div>
+            ) : (
+              <>
+                <div className="p-3 rounded-xl bg-surface-inset/60 border border-surface-border space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-ink-secondary">Recipient:</span>
+                    <span className="font-bold text-navy">
+                      {clients.find((c) => c.id === editInvoice.client_id)?.contact_person ||
+                        clients.find((c) => c.id === editInvoice.client_id)?.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-secondary">Outstanding Balance:</span>
+                    <span className="font-bold text-status-danger">
+                      {formatPeso(editInvoice.amount - editInvoice.amount_paid)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-ink-secondary">Due Date:</span>
+                    <span className="font-semibold text-navy">{formatDatePH(editInvoice.due_date)}</span>
+                  </div>
+                </div>
+
+                <Textarea
+                  label="Message"
+                  rows={5}
+                  value={editMessage}
+                  onChange={(e) => setEditMessage(e.target.value)}
+                />
+
+                {(() => {
+                  const estimate = estimateSMSSegments(editMessage);
+                  return (
+                    <div className="text-[11px] text-ink-secondary">
+                      {estimate.characterCount} characters · {estimate.encoding} · est.{' '}
+                      {estimate.segments} segment{estimate.segments === 1 ? '' : 's'}
+                    </div>
+                  );
+                })()}
+
+                <label className="flex items-start space-x-2.5 cursor-pointer p-3 rounded-xl bg-surface-inset/50 border border-surface-border">
+                  <input
+                    type="checkbox"
+                    checked={confirmed}
+                    onChange={(e) => setConfirmed(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded border-surface-border text-navy focus:ring-navy/30"
+                  />
+                  <span className="leading-relaxed">
+                    I approve sending this reminder for{' '}
+                    <span className="font-mono font-semibold">{editInvoice.invoice_number}</span>.
+                  </span>
+                </label>
+
+                <div className="flex justify-end space-x-2 pt-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setEditInvoice(null)}
+                    disabled={sendingId === editInvoice.id}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => handleApproveAndSend(editInvoice, editMessage.trim())}
+                    isLoading={sendingId === editInvoice.id}
+                    disabled={!confirmed || !editMessage.trim() || sendingId === editInvoice.id}
+                    leftIcon={sendingId !== editInvoice.id ? <Send className="w-3.5 h-3.5" /> : undefined}
+                  >
+                    Approve &amp; Send Now
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
+    </AppShell>
+  );
+}

@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
-import { generateInvoiceReminderSMS } from '@/lib/sms/philsms';
+import { buildReminderSMS } from '@/lib/sms/templates';
 
 export default function FounderDashboard() {
   const {
@@ -27,6 +27,7 @@ export default function FounderDashboard() {
     expenses,
     advances,
     clients,
+    projects,
     getFounderMetrics,
     sendSMS,
   } = useDataStore();
@@ -49,26 +50,32 @@ export default function FounderDashboard() {
     setSmsModalOpen(true);
   };
 
+  /** Centralized reminder wording (fallback variant — no email-date claim). */
+  const buildSmsPreviewMessage = (inv: any): string => {
+    const client = clients.find((c) => c.id === inv.client_id);
+    const project = projects.find((p) => p.id === inv.project_id);
+    return buildReminderSMS({
+      contactPerson: client?.contact_person,
+      companyName: client?.name,
+      invoiceNumber: inv.invoice_number,
+      projectName: project?.name || 'your project',
+      outstandingBalance: inv.amount - inv.amount_paid,
+      dueDate: inv.due_date,
+      paymentRequestSentDate: null,
+    });
+  };
+
   const handleSendInvoiceSMS = async () => {
     if (!selectedInvoiceForSMS) return;
     setSmsSending(true);
 
-    const client = clients.find((c) => c.id === selectedInvoiceForSMS.client_id);
-    const clientName = client ? client.name : 'Valued Client';
-    const balance = selectedInvoiceForSMS.amount - selectedInvoiceForSMS.amount_paid;
-
-    const message = generateInvoiceReminderSMS(
-      clientName,
-      selectedInvoiceForSMS.invoice_number,
-      balance,
-      selectedInvoiceForSMS.due_date,
-      'overdue'
-    );
-
-    const sent = await sendSMS(clientName, client?.phone || '', message, selectedInvoiceForSMS.id);
+    const sent = await sendSMS({
+      invoiceId: selectedInvoiceForSMS.id,
+      message: buildSmsPreviewMessage(selectedInvoiceForSMS),
+    });
     setSmsSending(false);
     if (!sent) return;
-    setSmsSuccessMessage('Payment reminder SMS successfully dispatched via PhilSMS!');
+    setSmsSuccessMessage('Reminder handed to the PhilSMS gateway — see the SMS log for its status.');
     setTimeout(() => {
       setSmsModalOpen(false);
       setSmsSuccessMessage(null);
@@ -414,7 +421,7 @@ export default function FounderDashboard() {
                 <div className="space-y-1.5">
                   <label className="font-bold text-navy uppercase text-[11px]">SMS Message Preview (PhilSMS)</label>
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-ink-primary font-sans leading-relaxed text-xs">
-                    Good day Dr. Laurel, Asinta Architects reminder: Invoice {selectedInvoiceForSMS.invoice_number} for {formatPHP(selectedInvoiceForSMS.amount - selectedInvoiceForSMS.amount_paid)} is past due ({selectedInvoiceForSMS.due_date}). Kindly settle at your earliest convenience. Thank you.
+                    {buildSmsPreviewMessage(selectedInvoiceForSMS)}
                   </div>
                 </div>
 

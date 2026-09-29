@@ -11,6 +11,7 @@ export const FOUNDER_ONLY_ROUTES = [
   '/tools',
   '/users',
   '/sms',
+  '/reminders',
   '/settings',
 ] as const;
 

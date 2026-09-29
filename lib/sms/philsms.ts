@@ -65,21 +65,5 @@ export async function sendPhilSMS({
   }
 }
 
-export function generateInvoiceReminderSMS(
-  clientName: string,
-  invoiceNumber: string,
-  balance: number,
-  dueDate: string,
-  type: 'upcoming' | 'due_today' | 'overdue'
-): string {
-  const formattedBalance = `₱${balance.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-
-  switch (type) {
-    case 'upcoming':
-      return `Good day ${clientName}, Asinta Architects reminder: Invoice ${invoiceNumber} for ${formattedBalance} is scheduled for ${dueDate}. We appreciate your support.`;
-    case 'due_today':
-      return `Good day ${clientName}, Asinta Architects reminder: Invoice ${invoiceNumber} for ${formattedBalance} is due today (${dueDate}). Please send payment confirmation once settled.`;
-    case 'overdue':
-      return `Urgent: Good day ${clientName}, Asinta Architects notices Invoice ${invoiceNumber} for ${formattedBalance} was due on ${dueDate}. Kindly settle at your earliest convenience. Thank you.`;
-  }
-}
+// NOTE: Reminder SMS wording is centralized in lib/sms/templates.ts
+// (buildReminderSMS). This module is transport-only.

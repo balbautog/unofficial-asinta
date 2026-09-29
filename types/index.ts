@@ -63,6 +63,10 @@ export interface Invoice {
   due_date: string;
   status: InvoiceStatus;
   notes?: string;
+  /** Per-invoice opt-in for automatic reminders (defaults to false). */
+  automatic_reminders_enabled: boolean;
+  /** When set to a future timestamp, reminders are paused for this invoice. */
+  reminders_paused_until: string | null;
   created_at: string;
 }
 
@@ -144,14 +148,92 @@ export interface Tool {
   created_at: string;
 }
 
+export type SMSLogStatus = 'delivered' | 'sent' | 'pending' | 'failed';
+
 export interface SMSLog {
   id: string;
   invoice_id: string | null;
   recipient: string;
   phone: string;
   message: string;
-  status: 'delivered' | 'sent' | 'pending' | 'failed';
+  /**
+   * Honest gateway status: 'sent' = provider accepted, 'delivered' = provider
+   * delivery receipt only, 'pending' = queued or simulation, 'failed' = error.
+   */
+  status: SMSLogStatus;
+  provider_message_id?: string | null;
+  error_message?: string | null;
+  /** True when PhilSMS was not configured and nothing left the server. */
+  simulated?: boolean;
+  provider_status?: string | null;
+  updated_at?: string | null;
   sent_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Communications (email + reminder automation)
+// ---------------------------------------------------------------------------
+
+export type EmailTemplateType =
+  | 'initial_request'
+  | 'upcoming_reminder'
+  | 'due_today'
+  | 'overdue'
+  | 'payment_acknowledgment'
+  | 'final_demand';
+
+export interface EmailTemplate {
+  id: string;
+  template_type: EmailTemplateType;
+  subject_template: string;
+  body_template: string;
+  version: number;
+  active: boolean;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * 'accepted' = the SMTP server accepted the message (Nodemailer success).
+ * 'delivered' is reserved for explicit provider delivery confirmations.
+ */
+export type EmailLogStatus = 'pending' | 'accepted' | 'failed' | 'delivered' | 'bounced';
+
+export interface EmailLog {
+  id: string;
+  invoice_id: string;
+  recipient: string;
+  subject: string;
+  body_text: string;
+  body_html: string;
+  template_type: EmailTemplateType;
+  template_version: number;
+  status: EmailLogStatus;
+  provider_message_id: string | null;
+  error_message: string | null;
+  sent_by: string | null;
+  sent_at: string | null;
+  created_at: string;
+  idempotency_key: string;
+}
+
+export type ReminderChannel = 'sms' | 'email';
+export type ReminderDispatchStatus = 'pending' | 'sent' | 'failed' | 'skipped';
+export type ReminderType = 'upcoming' | 'due_today' | 'overdue' | 'follow_up';
+
+export interface ReminderDispatch {
+  id: string;
+  invoice_id: string;
+  channel: ReminderChannel;
+  reminder_type: ReminderType;
+  scheduled_date: string;
+  idempotency_key: string;
+  status: ReminderDispatchStatus;
+  provider_message_id: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  created_at: string;
 }
 
 export interface AppNotification {
