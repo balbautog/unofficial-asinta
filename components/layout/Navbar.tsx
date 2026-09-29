@@ -2,10 +2,9 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/authContext';
 import { useDataStore } from '@/lib/data/store';
-import { generateInvoiceReminderSMS } from '@/lib/sms/philsms';
 import {
   Building2,
   LogOut,
@@ -14,7 +13,6 @@ import {
   Bell,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 
 interface NavbarProps {
   onToggleMobileMenu?: () => void;
@@ -24,7 +22,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileMenu }) => {
   const { user, logout, isFounder } = useAuth();
   const { invoices, advances, attendance } = useDataStore();
   const router = useRouter();
-  const pathname = usePathname();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 

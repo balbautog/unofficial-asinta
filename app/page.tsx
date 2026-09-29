@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Building2, ShieldCheck, UserCheck, ArrowRight, Compass, HardHat, Lock } from 'lucide-react';
+import { Building2, ArrowRight, Compass, HardHat, Lock } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 
@@ -78,7 +78,7 @@ export default function GatewayPage() {
             </div>
 
             <div className="mt-8">
-              <Link href="/login/admin" className="block w-full">
+              <Link href="/login" className="block w-full">
                 <Button variant="primary" size="lg" className="w-full justify-between group-hover:bg-navy-deep">
                   <span>Enter Business Portal</span>
                   <ArrowRight className="w-4 h-4" />
@@ -117,7 +117,7 @@ export default function GatewayPage() {
             </div>
 
             <div className="mt-8">
-              <Link href="/login/supervisor" className="block w-full">
+              <Link href="/login" className="block w-full">
                 <Button variant="secondary" size="lg" className="w-full justify-between">
                   <span>Enter Attendance Portal</span>
                   <ArrowRight className="w-4 h-4" />

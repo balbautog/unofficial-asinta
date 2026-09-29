@@ -7,30 +7,21 @@ import { useAuth } from '@/lib/auth/authContext';
 import { AttendanceStatus } from '@/types';
 import {
   UserCheck,
-  Calendar,
-  Clock,
   CheckCircle2,
-  AlertCircle,
-  HardHat,
   Search,
-  Check,
-  X,
   History,
-  ShieldCheck,
-  ChevronRight,
-  Filter,
   Save,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { useToast } from '@/components/ui/Toast';
 
 export default function AttendancePage() {
   const { user, isFounder, isSupervisor } = useAuth();
+  const { showToast } = useToast();
   const {
     workers,
     projects,
@@ -157,6 +148,10 @@ export default function AttendancePage() {
     e.preventDefault();
     if (!selectedProjectId) return;
     if (!user) return;
+    if (selectedDate > today) {
+      showToast('error', 'Attendance cannot be recorded for a future date.');
+      return;
+    }
 
     setIsSubmitting(true);
     const batch = Object.entries(draftAttendance).map(([workerId, data]) => ({
@@ -297,6 +292,7 @@ export default function AttendancePage() {
               <Input
                 type="date"
                 value={selectedDate}
+                max={today}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="py-1.5 text-xs"
               />

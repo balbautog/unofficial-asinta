@@ -18,10 +18,7 @@ import {
   UserCog,
   Settings,
   X,
-  Compass,
-  Shield,
 } from 'lucide-react';
-import { Badge } from '@/components/ui/Badge';
 
 interface MobileNavProps {
   isOpen: boolean;

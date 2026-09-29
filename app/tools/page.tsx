@@ -3,18 +3,13 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
 import { Tool, ToolCondition } from '@/types';
 import {
   Wrench,
   Plus,
   Search,
-  CheckCircle2,
-  AlertTriangle,
-  FolderKanban,
   Edit2,
   Trash2,
-  Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -23,7 +18,6 @@ import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 
 export default function ToolsPage() {
-  const { isFounder } = useAuth();
   const { tools, projects, createTool, updateTool, deleteTool } = useDataStore();
 
   const [searchQuery, setSearchQuery] = useState('');

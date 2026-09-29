@@ -5,23 +5,17 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
-import { Project, ProjectStatus } from '@/types';
+import { ProjectStatus } from '@/types';
 import {
   FolderKanban,
   Plus,
   Search,
-  Building2,
   Calendar,
   MapPin,
-  Clock,
-  CheckCircle2,
   ArrowRight,
-  TrendingUp,
-  UserCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';

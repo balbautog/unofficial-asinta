@@ -3,23 +3,15 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
 import { Invoice, InvoiceStatus } from '@/types';
 import {
-  Receipt,
   Plus,
   Search,
   CheckCircle2,
-  AlertTriangle,
   Send,
   Eye,
   DollarSign,
   Printer,
-  Building2,
-  Calendar,
-  Clock,
-  ArrowRight,
-  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -28,16 +20,27 @@ import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
 import { generateInvoiceReminderSMS } from '@/lib/sms/philsms';
 
+function getNextInvoiceNumber(invoices: Invoice[], year: number): string {
+  const prefix = `ASINTA-${year}-`;
+  const maxSequence = invoices.reduce((maximum, invoice) => {
+    if (!invoice.invoice_number.startsWith(prefix)) return maximum;
+    const sequence = Number.parseInt(invoice.invoice_number.slice(prefix.length), 10);
+    return Number.isNaN(sequence) ? maximum : Math.max(maximum, sequence);
+  }, 0);
+
+  return `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
+}
+
+const today = () => new Date().toISOString().split('T')[0];
+const defaultDueDate = () => new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0];
+
 export default function InvoicesPage() {
-  const { isFounder } = useAuth();
   const {
     invoices,
     projects,
     clients,
     createInvoice,
-    updateInvoice,
     recordInvoicePayment,
-    deleteInvoice,
     sendSMS,
   } = useDataStore();
 
@@ -56,14 +59,14 @@ export default function InvoicesPage() {
   const [smsSuccess, setSmsSuccess] = useState<string | null>(null);
 
   // New Invoice Form
-  const nextInvoiceNum = `ASINTA-2026-00${invoices.length + 1}`;
+  const initialIssueDate = today();
   const [formData, setFormData] = useState({
-    invoice_number: nextInvoiceNum,
+    invoice_number: getNextInvoiceNumber(invoices, Number(initialIssueDate.slice(0, 4))),
     project_id: '',
     client_id: '',
     amount: '',
-    issue_date: new Date().toISOString().split('T')[0],
-    due_date: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+    issue_date: initialIssueDate,
+    due_date: defaultDueDate(),
     notes: '',
     status: 'pending' as InvoiceStatus,
   });
@@ -96,8 +99,10 @@ export default function InvoicesPage() {
     e.preventDefault();
     if (!formData.project_id || !formData.amount) return;
 
+    const issueYear = Number(formData.issue_date.slice(0, 4)) || new Date().getFullYear();
+    const invoiceNumber = getNextInvoiceNumber(invoices, issueYear);
     const created = await createInvoice({
-      invoice_number: formData.invoice_number || nextInvoiceNum,
+      invoice_number: invoiceNumber,
       project_id: formData.project_id,
       client_id: formData.client_id,
       amount: parseFloat(formData.amount),
@@ -110,13 +115,15 @@ export default function InvoicesPage() {
 
     if (created) {
       setIsCreateModalOpen(false);
+      const nextIssueDate = today();
+      const nextYear = Number(nextIssueDate.slice(0, 4));
       setFormData({
-        invoice_number: `ASINTA-2026-00${invoices.length + 2}`,
+        invoice_number: getNextInvoiceNumber([...invoices, created], nextYear),
         project_id: '',
         client_id: '',
         amount: '',
-        issue_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+        issue_date: nextIssueDate,
+        due_date: defaultDueDate(),
         notes: '',
         status: 'pending',
       });
@@ -181,7 +188,14 @@ export default function InvoicesPage() {
           <Button
             variant="primary"
             size="md"
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => {
+              const issueYear = Number(formData.issue_date.slice(0, 4)) || new Date().getFullYear();
+              setFormData((current) => ({
+                ...current,
+                invoice_number: getNextInvoiceNumber(invoices, issueYear),
+              }));
+              setIsCreateModalOpen(true);
+            }}
             leftIcon={<Plus className="w-4 h-4" />}
           >
             Create Invoice
@@ -347,7 +361,7 @@ export default function InvoicesPage() {
             <Input
               label="Invoice Number"
               value={formData.invoice_number}
-              onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })}
+              readOnly
               required
             />
             <Select
@@ -386,7 +400,15 @@ export default function InvoicesPage() {
               label="Issue Date"
               type="date"
               value={formData.issue_date}
-              onChange={(e) => setFormData({ ...formData, issue_date: e.target.value })}
+              onChange={(e) => {
+                const issueDate = e.target.value;
+                const year = Number(issueDate.slice(0, 4)) || new Date().getFullYear();
+                setFormData({
+                  ...formData,
+                  issue_date: issueDate,
+                  invoice_number: getNextInvoiceNumber(invoices, year),
+                });
+              }}
               required
             />
             <Input

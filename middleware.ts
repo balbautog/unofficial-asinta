@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createMiddlewareSupabaseClient } from '@/lib/supabase/middleware';
+import { isFounderOnlyPath } from '@/lib/auth/routes';
 
 /**
  * Route protection middleware.
@@ -11,19 +12,6 @@ import { createMiddlewareSupabaseClient } from '@/lib/supabase/middleware';
  *    Founder-only route policy (PostgreSQL RLS remains the last line of
  *    defense for every data query).
  */
-
-const FOUNDER_ONLY_ROUTES = [
-  '/dashboard',
-  '/invoices',
-  '/expenses',
-  '/payroll',
-  '/advances',
-  '/clients',
-  '/tools',
-  '/users',
-  '/sms',
-  '/settings',
-];
 
 function redirectTo(request: NextRequest, pathname: string, params?: Record<string, string>) {
   const url = request.nextUrl.clone();
@@ -61,7 +49,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
-    return redirectTo(request, '/login/admin', { redirect_to: pathname });
+    return redirectTo(request, '/login', { redirect_to: pathname });
   }
 
   // Fetch the database role for the authenticated user from public.users.
@@ -76,19 +64,18 @@ export async function middleware(request: NextRequest) {
     // Authenticated in Supabase Auth but no BALE profile row exists.
     // The client auth context performs the sign-out cleanup; here we just
     // bounce the request back to the login portal.
-    return redirectTo(request, '/login/admin', { error: 'no_profile' });
+    return redirectTo(request, '/login', { error: 'no_profile' });
   }
 
   const role = profile.role as string | null;
 
   if (role !== 'founder' && role !== 'supervisor') {
-    return redirectTo(request, '/login/admin', { error: 'invalid_role' });
+    return redirectTo(request, '/login', { error: 'invalid_role' });
   }
 
   // Supervisors may only access the attendance terminal and project pages.
   if (role === 'supervisor') {
-    const isRestricted = FOUNDER_ONLY_ROUTES.some((route) => pathname.startsWith(route));
-    if (isRestricted) {
+    if (isFounderOnlyPath(pathname)) {
       return redirectTo(request, '/attendance');
     }
   }

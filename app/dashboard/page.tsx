@@ -4,23 +4,14 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
 import {
-  FolderKanban,
   Receipt,
   CreditCard,
-  Banknote,
   HandCoins,
-  TrendingUp,
   AlertTriangle,
-  Plus,
   ArrowRight,
-  Building2,
-  Calendar,
   Sparkles,
-  MessageSquare,
   CheckCircle2,
-  Clock,
   Send,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
@@ -28,17 +19,12 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
-import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { generateInvoiceReminderSMS } from '@/lib/sms/philsms';
 
 export default function FounderDashboard() {
-  const { isFounder } = useAuth();
   const {
-    projects,
     invoices,
     expenses,
-    workers,
     advances,
     clients,
     getFounderMetrics,

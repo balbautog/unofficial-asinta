@@ -3,37 +3,25 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
-import { Advance, AdvanceStatus } from '@/types';
+import { Advance } from '@/types';
 import {
-  HandCoins,
   Plus,
   Search,
-  CheckCircle2,
-  AlertCircle,
-  Banknote,
-  Calendar,
-  User,
-  ArrowRight,
   TrendingDown,
-  DollarSign,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 
 export default function AdvancesPage() {
-  const { isFounder } = useAuth();
   const {
     advances,
     workers,
     projects,
     createAdvance,
     recordAdvanceDeduction,
-    updateAdvanceStatus,
   } = useDataStore();
 
   const [searchQuery, setSearchQuery] = useState('');

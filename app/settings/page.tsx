@@ -1,41 +1,53 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
-import {
-  Settings,
-  Building2,
-  Shield,
-  Bot,
-  MessageSquareText,
-  Database,
-  Lock,
-  RefreshCw,
-  CheckCircle2,
-  Key,
-  Compass,
-} from 'lucide-react';
+import { Building2, Shield, Bot, Database, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
+
+interface IntegrationStatus {
+  groqConfigured: boolean;
+  philsmsConfigured: boolean;
+  supabaseConfigured: boolean;
+}
 
 export default function SettingsPage() {
-  const { user, isFounder } = useAuth();
+  const { isFounder } = useAuth();
   const { refresh, isLoading, isLoaded } = useDataStore();
 
   const [mfaEnabled, setMfaEnabled] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
-  };
+  useEffect(() => {
+    let active = true;
+
+    fetch('/api/integrations/status', { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load integration status');
+        return response.json() as Promise<IntegrationStatus>;
+      })
+      .then((status) => {
+        if (active) setIntegrationStatus(status);
+      })
+      .catch(() => {
+        if (active) {
+          setIntegrationStatus({
+            groqConfigured: false,
+            philsmsConfigured: false,
+            supabaseConfigured: false,
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleResyncData = async () => {
     setIsResyncing(true);
@@ -61,13 +73,6 @@ export default function SettingsPage() {
             </h1>
           </div>
         </div>
-
-        {saveSuccess && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Settings and integration parameters updated successfully.</span>
-          </div>
-        )}
 
         {/* Firm Profile */}
         <Card>
@@ -164,7 +169,16 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-2xl bg-surface-inset/50 border border-surface-border space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-navy">Groq AI Engine</span>
-                    <Badge variant="navy" size="sm">Active</Badge>
+                    <Badge
+                      variant={integrationStatus?.groqConfigured ? 'success' : 'warning'}
+                      size="sm"
+                    >
+                      {!integrationStatus
+                        ? 'Checking'
+                        : integrationStatus.groqConfigured
+                          ? 'Configured'
+                          : 'Not Configured'}
+                    </Badge>
                   </div>
                   <div className="text-ink-secondary">
                     Model: <span className="font-mono text-navy font-semibold">llama-3.3-70b-versatile</span>
@@ -177,7 +191,16 @@ export default function SettingsPage() {
                 <div className="p-4 rounded-2xl bg-surface-inset/50 border border-surface-border space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-navy">PhilSMS Gateway</span>
-                    <Badge variant="success" size="sm">Connected</Badge>
+                    <Badge
+                      variant={integrationStatus?.philsmsConfigured ? 'success' : 'warning'}
+                      size="sm"
+                    >
+                      {!integrationStatus
+                        ? 'Checking'
+                        : integrationStatus.philsmsConfigured
+                          ? 'Configured'
+                          : 'Simulation Mode'}
+                    </Badge>
                   </div>
                   <div className="text-ink-secondary">
                     Sender ID: <span className="font-mono text-navy font-semibold">ASINTA</span>
@@ -204,8 +227,15 @@ export default function SettingsPage() {
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-navy">Supabase Project</span>
-                <Badge variant={isSupabaseConfigured() ? 'success' : 'warning'} size="sm">
-                  {isSupabaseConfigured() ? 'Configured' : 'Local Dev Default'}
+                <Badge
+                  variant={integrationStatus?.supabaseConfigured ? 'success' : 'warning'}
+                  size="sm"
+                >
+                  {!integrationStatus
+                    ? 'Checking'
+                    : integrationStatus.supabaseConfigured
+                      ? 'Configured'
+                      : 'Local Dev Default'}
                 </Badge>
               </div>
               <div className="text-ink-secondary">

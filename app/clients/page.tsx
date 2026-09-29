@@ -3,29 +3,22 @@
 import React, { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
-import { useAuth } from '@/lib/auth/authContext';
 import { Client } from '@/types';
 import {
-  Users,
   Plus,
   Search,
   Phone,
   Mail,
   MapPin,
-  FolderKanban,
-  Receipt,
   Edit2,
   Trash2,
-  Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 
 export default function ClientsPage() {
-  const { isFounder } = useAuth();
   const { clients, projects, invoices, createClient, updateClient, deleteClient } = useDataStore();
 
   const [searchQuery, setSearchQuery] = useState('');

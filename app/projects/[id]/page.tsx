@@ -7,20 +7,14 @@ import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
 import {
-  FolderKanban,
   ArrowLeft,
   Calendar,
   MapPin,
-  Building2,
-  Receipt,
-  CreditCard,
   Wrench,
   UserCheck,
   Plus,
   Trash2,
   Edit2,
-  CheckCircle2,
-  Clock,
   Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -36,7 +30,7 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const id = params?.id as string;
 
-  const { isFounder, isSupervisor, user } = useAuth();
+  const { isFounder } = useAuth();
   const {
     projects,
     clients,
