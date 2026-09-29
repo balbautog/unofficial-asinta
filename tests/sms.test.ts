@@ -122,8 +122,9 @@ describe('honest gateway statuses', () => {
     vi.stubGlobal('fetch', fetchSpy);
 
     const result = await sendPhilSMS({ recipient: 'X', phone: '+639178421190', message: 'test' });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     expect(result.simulated).toBe(true);
+    expect(result.error).toContain('no SMS was sent');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -131,13 +132,40 @@ describe('honest gateway statuses', () => {
     vi.stubEnv('PHILSMS_API_KEY', 'test-key');
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => ({ ok: false, status: 401 }))
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({ message: 'Unauthorized' }) }))
     );
 
     const result = await sendPhilSMS({ recipient: 'X', phone: '+639178421190', message: 'test' });
     expect(result.success).toBe(false);
     expect(result.simulated).toBeUndefined();
     expect(result.error).toContain('HTTP 401');
+  });
+
+  it('requires PhilSMS to explicitly confirm API acceptance, not just HTTP 200', async () => {
+    vi.stubEnv('PHILSMS_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'error', message: 'Insufficient balance' }),
+    })));
+
+    const result = await sendPhilSMS({ recipient: 'X', phone: '+639178421190', message: 'test' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Insufficient balance');
+  });
+
+  it('returns provider acceptance and message ID only for explicit success', async () => {
+    vi.stubEnv('PHILSMS_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'success', data: { uid: 'provider-123' } }),
+    })));
+
+    const result = await sendPhilSMS({ recipient: 'X', phone: '+639178421190', message: 'test' });
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe('provider-123');
+    expect(result.providerStatus).toBe('success');
   });
 
   it('formats SMS dates in Manila time', () => {

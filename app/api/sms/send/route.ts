@@ -106,25 +106,17 @@ export async function POST(req: NextRequest) {
     });
 
     const update = result.success
-      ? result.simulated
-        ? {
-            status: 'pending',
-            simulated: true,
-            provider_status: 'simulation',
-            provider_message_id: result.messageId || null,
-            updated_at: new Date().toISOString(),
-          }
-        : {
-            status: 'sent',
-            simulated: false,
-            provider_status: 'sent',
-            provider_message_id: result.messageId || null,
-            updated_at: new Date().toISOString(),
-          }
+      ? {
+          status: 'sent',
+          simulated: false,
+          provider_status: result.providerStatus || 'success',
+          provider_message_id: result.messageId || null,
+          updated_at: new Date().toISOString(),
+        }
       : {
           status: 'failed',
-          simulated: false,
-          provider_status: 'failed',
+          simulated: Boolean(result.simulated),
+          provider_status: result.simulated ? 'simulation' : result.providerStatus || 'failed',
           error_message: result.error || 'Unknown gateway failure',
           updated_at: new Date().toISOString(),
         };
