@@ -4,9 +4,11 @@
 # the command had nothing to read and the documented local workflow did not
 # work. Run `supabase start` from the repository root.
 #
-# NOTE: duration-based session controls (auth.sessions timebox /
-# inactivity_timeout) are deliberately NOT set here yet — they are part of the
-# session-security work and will be added with the idle-warning dialog.
+# Session controls below mirror the production values documented in
+# docs/SECURITY.md. Supabase is the enforcer; the client-side warning dialog in
+# components/auth/SessionWatcher.tsx calls the same numbers so the two agree.
+# Change them in BOTH places (and in .env.local) or the dialog will warn at the
+# wrong moment.
 
 project_id = "unofficial-asinta"
 
@@ -41,6 +43,15 @@ jwt_expiry = 3600
 # Matches the app's expectations: accounts are provisioned, not self-registered.
 # See supabase/migrations/20260913000002_bale_seed.sql for the demo accounts.
 enable_signup = true
+
+[auth.sessions]
+# Absolute limit: a session is closed this long after sign-in, no matter how
+# active it is. 8 hours covers a full site day without an overnight-open tab.
+timebox = "8h"
+# Idle limit: no activity for this long and the session stops refreshing.
+# Enforced at token refresh, so an expired session is not killed at the instant
+# the clock runs out — it is refused on the next refresh.
+inactivity_timeout = "20m"
 
 [auth.email]
 # Local development only — no real mail is sent; messages land in Inbucket.

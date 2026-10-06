@@ -4,8 +4,22 @@
 -- Generated from the retired local mock dataset. Every record now lives
 -- in live Supabase PostgreSQL; the app has NO client-side mock fallback.
 --
+-- ###########################################################################
+-- ## DEMO SEED — LOCAL DEVELOPMENT ONLY. NEVER RUN IN PRODUCTION.          ##
+-- ##                                                                       ##
+-- ## This file creates real auth accounts with a published password         ##
+-- ## (asinta2026), plus fictional clients, invoices and payroll. Applying   ##
+-- ## it to a production project hands anyone who reads this repository a    ##
+-- ## working login to the firm's books.                                    ##
+-- ##                                                                       ##
+-- ## Production accounts are provisioned through the Supabase Auth         ##
+-- ## dashboard / Admin API with a password chosen by the founder, and the  ##
+-- ## password is rotated on first sign-in. See docs/SECURITY.md § Seed &   ##
+-- ## credentials, and rotate immediately if this file was ever applied.    ##
+-- ###########################################################################
+--
 -- Demo auth password for every seeded account: asinta2026
--- (change these immediately for any real deployment).
+-- (change these immediately for any real deployment — see docs/SECURITY.md).
 --
 -- The script is idempotent — re-running it never duplicates rows.
 -- =============================================================

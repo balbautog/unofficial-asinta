@@ -16,6 +16,13 @@ interface ModalProps {
   role?: 'dialog' | 'alertdialog';
   /** Set false when an accidental outside click must not dismiss (session warnings). */
   dismissOnBackdrop?: boolean;
+  /**
+   * Set false for alertdialogs where Escape must not silently dismiss the only
+   * warning (e.g. the session-expiry dialog, where every dismissal is a choice).
+   */
+  dismissOnEscape?: boolean;
+  /** Set false for alertdialogs whose choices are the only acceptable exits. */
+  showCloseButton?: boolean;
 }
 
 const FOCUSABLE_SELECTOR = [
@@ -42,6 +49,8 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth = 'md',
   role = 'dialog',
   dismissOnBackdrop = true,
+  dismissOnEscape = true,
+  showCloseButton = true,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -65,7 +74,10 @@ export const Modal: React.FC<ModalProps> = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        if (dismissOnEscape) onClose();
+        // Otherwise swallow the key entirely: leaving it unhandled would let a
+        // keydown listener further up the tree act on it.
+        event.preventDefault();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -103,7 +115,7 @@ export const Modal: React.FC<ModalProps> = ({
       // Return focus to whatever opened the dialog.
       previouslyFocusedRef.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, dismissOnEscape]);
 
   if (!isOpen) return null;
 
@@ -157,14 +169,16 @@ export const Modal: React.FC<ModalProps> = ({
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="p-1.5 rounded-xl text-ink-secondary hover:text-navy hover:bg-surface-inset transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {showCloseButton && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="p-1.5 rounded-xl text-ink-secondary hover:text-navy hover:bg-surface-inset transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Content */}

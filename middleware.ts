@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createMiddlewareSupabaseClient } from '@/lib/supabase/middleware';
 import { canRoleAccessPath, getSafeRedirectPath, isFounderOnlyPath, type AppRole } from '@/lib/auth/routes';
+import { isMfaEnforcementEnabled } from '@/lib/auth/mfa';
 
 /**
  * Route protection middleware.
@@ -119,6 +120,28 @@ export async function middleware(request: NextRequest) {
   // they are never redirected into Founder-only routes.
   if (role === 'supervisor' && isFounderOnlyPath(pathname)) {
     return redirectTo(request, '/attendance');
+  }
+
+  // Founder MFA. Opt-in via MFA_ENFORCE_FOUNDERS so the firm cannot be locked
+  // out before both founders have enrolled; see lib/auth/mfa.ts. The decision is
+  // made here (server-side) AND re-checked in requireFounder for API routes —
+  // a browser cannot skip it by calling the API directly.
+  if (role === 'founder' && isMfaEnforcementEnabled()) {
+    try {
+      const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const verified = assurance?.currentLevel === 'aal2';
+
+      if (!verified && pathname !== '/mfa') {
+        return redirectTo(request, '/mfa');
+      }
+      if (verified && pathname === '/mfa') {
+        return redirectTo(request, '/dashboard');
+      }
+    } catch {
+      // If the assurance level cannot be read, fail CLOSED for founder routes:
+      // an unreadable MFA state must not silently downgrade to password-only.
+      if (pathname !== '/mfa') return redirectTo(request, '/mfa');
+    }
   }
 
   return response;

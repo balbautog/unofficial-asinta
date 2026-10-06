@@ -99,6 +99,22 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    /**
+     * On port 587 (`secure: false`) STARTTLS is negotiated opportunistically by
+     * default: if a man-in-the-middle strips the STARTTLS advertisement, the
+     * session silently continues in cleartext — exposing the SMTP credentials
+     * (AUTH LOGIN base64) and every message body. `requireTLS` makes the send
+     * FAIL instead of downgrading.
+     *
+     * Set SMTP_REQUIRE_TLS=false only for a relay that genuinely cannot do TLS
+     * (e.g. a localhost-only development mail catcher); it must never be false
+     * for a real provider on a public network.
+     */
+    requireTLS: (process.env.SMTP_REQUIRE_TLS || 'true').toLowerCase() !== 'false',
+    tls: {
+      // Refuse protocol versions with known weaknesses.
+      minVersion: 'TLSv1.2',
+    },
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
     socketTimeout: 30_000,

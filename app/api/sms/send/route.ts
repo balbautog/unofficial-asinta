@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireFounder } from '@/lib/auth/serverRole';
 import { deliverAndLogSMS } from '@/lib/sms/deliver';
 import { normalizePhilippineMobile } from '@/lib/sms/phone';
+import { enforceRateLimit } from '@/lib/api/rateLimitGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,11 @@ export async function POST(req: NextRequest) {
     if (!founder.ok) {
       return NextResponse.json({ error: founder.error }, { status: founder.status });
     }
+
+    // Cost control: every SMS is billed by the gateway. A stuck retry loop must
+    // not be able to drain the SMS budget.
+    const limited = enforceRateLimit('smsSend', req.headers, founder.userId);
+    if (limited) return limited;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {

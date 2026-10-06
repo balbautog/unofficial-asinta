@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeExpenseWithAI } from '@/lib/ai/groq';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { enforceRateLimit } from '@/lib/api/rateLimitGuard';
 
 /**
  * Groq AI expense categorization.
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+
+    // Groq tokens are paid per request.
+    const limited = enforceRateLimit('aiSuggest', req.headers, user.id);
+    if (limited) return limited;
 
     const body = await req.json();
     const { description } = body;
