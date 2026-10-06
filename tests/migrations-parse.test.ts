@@ -62,6 +62,7 @@ interface CreatePolicyNode {
 interface DropStmtNode {
   removeType?: string;
   missing_ok?: boolean;
+  objects?: Array<{ List?: { items?: Array<{ String?: { sval?: string } }> } }>;
 }
 
 interface ParsedStatement {
