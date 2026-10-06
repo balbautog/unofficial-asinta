@@ -115,15 +115,28 @@ production credentials. **Open** = known work, deliberately deferred.
 
 ## Needs live project (blocked, not abandoned)
 
-- **Apply migrations** `2026100600000{0,1,2}_*.sql` to a real project, then
-  smoke-test: bucket is private, an old receipt still opens (re-attach if not —
-  the backfill clears URLs it cannot resolve), a mutation writes an audit row.
+- **Apply migrations.** Prepared, not applied: the agent sandbox's egress
+  allowlist covers only npm and GitHub, so `*.supabase.co` is unreachable from
+  it — verified with a direct probe, not assumed. Three ready paths, documented
+  in `docs/MIGRATION_RUNBOOK.md`: paste `supabase/apply/<bundle>.sql` into the
+  SQL editor (A), `supabase db push` with the DB password (B — runs the seed
+  too, delete it first), or the manual-only GitHub Actions workflow (C).
+  `supabase/apply/verify-live.sql` turns each static test guard into a live
+  PASS/FAIL row; run it afterwards.
+- **Post-migration smoke test:** bucket is private, an old receipt still opens
+  (re-attach if not — the backfill clears URLs it cannot resolve), a mutation
+  writes an audit row.
+- **First Founder account** must be created through the Auth dashboard and
+  linked with a `public.users` row (`role = 'founder'`) — the seed is not
+  applied to production. `docs/MIGRATION_RUNBOOK.md` §6.
 - **Backups/PITR:** verify the plan, then **perform and record a test restore**
   (table in `docs/SECURITY.md` §10 — currently marked not performed).
 - **MFA rollout:** deploy with `MFA_ENFORCE_FOUNDERS=false` → both founders
   enrol → flip to `true` → confirm a Founder without a code is redirected.
 - **Session fields** in the managed dashboard must match `supabase/config.toml`
   (20 min idle / 8 h absolute); `config.toml` only governs the local stack.
+- **Supabase Auth rate limits** for sign-in (the app limiter never sees login
+  traffic) — dashboard setting, `docs/SECURITY.md` §7.
 
 ## Backlog
 
