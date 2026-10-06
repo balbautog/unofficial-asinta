@@ -125,15 +125,15 @@ ALTER TABLE public.reminder_dispatches ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Founders full access to email_templates" ON public.email_templates;
 CREATE POLICY "Founders full access to email_templates" ON public.email_templates
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 DROP POLICY IF EXISTS "Founders full access to email_logs" ON public.email_logs;
 CREATE POLICY "Founders full access to email_logs" ON public.email_logs
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 DROP POLICY IF EXISTS "Founders full access to reminder_dispatches" ON public.reminder_dispatches;
 CREATE POLICY "Founders full access to reminder_dispatches" ON public.reminder_dispatches
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- ---------------------------------------------------------------------------
 -- 7. SEED THE DEFAULT "INITIAL REQUEST FOR PAYMENT" TEMPLATE (idempotent)

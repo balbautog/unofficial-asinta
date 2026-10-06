@@ -8,13 +8,13 @@
 -- will fail. Check with verify-live.sql before running.
 --
 -- GENERATED FILE — do not edit. Regenerate with `npm run build:apply-sql`.
--- Generated: 2026-10-06T03:17:07.793Z
+-- Generated: 2026-10-06T04:33:48.691Z
 --
 -- Source files (in execution order) and their SHA-256:
---   20260913000000_bale_schema.sql  6c640e1b13e89fd7…
+--   20260913000000_bale_schema.sql  df054d9d265045b9…
 --   20260913000001_bale_schema_additions.sql  6138de8fd2fb508d…
---   20260929000000_communications.sql  8866d7760063e20f…
---   20261006000000_security_hardening.sql  cb339d33b8f499a2…
+--   20260929000000_communications.sql  d266ebf5209376c1…
+--   20261006000000_security_hardening.sql  5990a60a9251e5ff…
 --   20261006000001_ai_draft_support.sql  b8bbb367efea29a3…
 --
 -- After running: execute supabase/apply/verify-live.sql and confirm every
@@ -240,67 +240,67 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- 1. Users policies
 CREATE POLICY "Founders have full access to users" ON public.users
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can read their own profile" ON public.users
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT TO authenticated USING (auth.uid() = id);
 
 -- 2. Projects policies
 CREATE POLICY "Founders have full access to projects" ON public.projects
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view assigned projects only" ON public.projects
-  FOR SELECT USING (public.is_supervisor_assigned(id));
+  FOR SELECT TO authenticated USING (public.is_supervisor_assigned(id));
 
 -- 3. Project Supervisors policies
 CREATE POLICY "Founders manage project supervisor assignments" ON public.project_supervisors
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view their own project assignments" ON public.project_supervisors
-  FOR SELECT USING (supervisor_id = auth.uid());
+  FOR SELECT TO authenticated USING (supervisor_id = auth.uid());
 
 -- 4. Invoices policies (Founder ONLY)
 CREATE POLICY "Founders full access to invoices" ON public.invoices
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 5. Clients policies (Founder ONLY)
 CREATE POLICY "Founders full access to clients" ON public.clients
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 6. Expenses policies (Founder ONLY)
 CREATE POLICY "Founders full access to expenses" ON public.expenses
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 7. Advances (Bale) policies (Founder ONLY)
 CREATE POLICY "Founders full access to advances" ON public.advances
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 8. Workers policies
 CREATE POLICY "Founders full access to workers" ON public.workers
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view active workers" ON public.workers
-  FOR SELECT USING (auth.uid() IS NOT NULL AND active = TRUE);
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL AND active = TRUE);
 
 -- 9. Attendance policies
 CREATE POLICY "Founders full access to attendance" ON public.attendance
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can read attendance for assigned projects" ON public.attendance
-  FOR SELECT USING (public.is_supervisor_assigned(project_id));
+  FOR SELECT TO authenticated USING (public.is_supervisor_assigned(project_id));
 CREATE POLICY "Supervisors can insert attendance for assigned projects" ON public.attendance
-  FOR INSERT WITH CHECK (public.is_supervisor_assigned(project_id));
+  FOR INSERT TO authenticated WITH CHECK (public.is_supervisor_assigned(project_id));
 CREATE POLICY "Supervisors can update attendance for assigned projects" ON public.attendance
-  FOR UPDATE USING (public.is_supervisor_assigned(project_id));
+  FOR UPDATE TO authenticated USING (public.is_supervisor_assigned(project_id));
 
 -- 10. Payroll policies (Founder ONLY)
 CREATE POLICY "Founders full access to payroll" ON public.payroll
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 11. Tools policies
 CREATE POLICY "Founders full access to tools" ON public.tools
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view tools on assigned projects" ON public.tools
-  FOR SELECT USING (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id));
+  FOR SELECT TO authenticated USING (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id));
 
 -- 12. SMS logs policies (Founder ONLY)
 CREATE POLICY "Founders full access to sms_logs" ON public.sms_logs
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 
 -- @@ source: 20260913000001_bale_schema_additions.sql
@@ -495,15 +495,15 @@ ALTER TABLE public.reminder_dispatches ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Founders full access to email_templates" ON public.email_templates;
 CREATE POLICY "Founders full access to email_templates" ON public.email_templates
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 DROP POLICY IF EXISTS "Founders full access to email_logs" ON public.email_logs;
 CREATE POLICY "Founders full access to email_logs" ON public.email_logs
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 DROP POLICY IF EXISTS "Founders full access to reminder_dispatches" ON public.reminder_dispatches;
 CREATE POLICY "Founders full access to reminder_dispatches" ON public.reminder_dispatches
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- ---------------------------------------------------------------------------
 -- 7. SEED THE DEFAULT "INITIAL REQUEST FOR PAYMENT" TEMPLATE (idempotent)
@@ -644,117 +644,117 @@ create policy "Founders can append to the audit log"
 drop policy if exists "Founders have full access to users" on public.users;
 create policy "Founders have full access to users"
   on public.users FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can read their own profile" on public.users;
 create policy "Supervisors can read their own profile"
   on public.users FOR SELECT to authenticated
-  using (auth.uid() = id)
+  using (auth.uid() = id);
 
 drop policy if exists "Founders have full access to projects" on public.projects;
 create policy "Founders have full access to projects"
   on public.projects FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can view assigned projects only" on public.projects;
 create policy "Supervisors can view assigned projects only"
   on public.projects FOR SELECT to authenticated
-  using (public.is_supervisor_assigned(id))
+  using (public.is_supervisor_assigned(id));
 
 drop policy if exists "Founders manage project supervisor assignments" on public.project_supervisors;
 create policy "Founders manage project supervisor assignments"
   on public.project_supervisors FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can view their own project assignments" on public.project_supervisors;
 create policy "Supervisors can view their own project assignments"
   on public.project_supervisors FOR SELECT to authenticated
-  using (supervisor_id = auth.uid())
+  using (supervisor_id = auth.uid());
 
 drop policy if exists "Founders full access to invoices" on public.invoices;
 create policy "Founders full access to invoices"
   on public.invoices FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to clients" on public.clients;
 create policy "Founders full access to clients"
   on public.clients FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to expenses" on public.expenses;
 create policy "Founders full access to expenses"
   on public.expenses FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to advances" on public.advances;
 create policy "Founders full access to advances"
   on public.advances FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to workers" on public.workers;
 create policy "Founders full access to workers"
   on public.workers FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can view active workers" on public.workers;
 create policy "Supervisors can view active workers"
   on public.workers FOR SELECT to authenticated
-  using (auth.uid() IS NOT NULL AND active = TRUE)
+  using (auth.uid() IS NOT NULL AND active = TRUE);
 
 drop policy if exists "Founders full access to attendance" on public.attendance;
 create policy "Founders full access to attendance"
   on public.attendance FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can read attendance for assigned projects" on public.attendance;
 create policy "Supervisors can read attendance for assigned projects"
   on public.attendance FOR SELECT to authenticated
-  using (public.is_supervisor_assigned(project_id))
+  using (public.is_supervisor_assigned(project_id));
 
 drop policy if exists "Supervisors can insert attendance for assigned projects" on public.attendance;
 create policy "Supervisors can insert attendance for assigned projects"
   on public.attendance FOR INSERT to authenticated
-  with check (public.is_supervisor_assigned(project_id))
+  with check (public.is_supervisor_assigned(project_id));
 
 drop policy if exists "Supervisors can update attendance for assigned projects" on public.attendance;
 create policy "Supervisors can update attendance for assigned projects"
   on public.attendance FOR UPDATE to authenticated
-  using (public.is_supervisor_assigned(project_id))
+  using (public.is_supervisor_assigned(project_id));
 
 drop policy if exists "Founders full access to payroll" on public.payroll;
 create policy "Founders full access to payroll"
   on public.payroll FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to tools" on public.tools;
 create policy "Founders full access to tools"
   on public.tools FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Supervisors can view tools on assigned projects" on public.tools;
 create policy "Supervisors can view tools on assigned projects"
   on public.tools FOR SELECT to authenticated
-  using (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id))
+  using (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id));
 
 drop policy if exists "Founders full access to sms_logs" on public.sms_logs;
 create policy "Founders full access to sms_logs"
   on public.sms_logs FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to email_templates" on public.email_templates;
 create policy "Founders full access to email_templates"
   on public.email_templates FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to email_logs" on public.email_logs;
 create policy "Founders full access to email_logs"
   on public.email_logs FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 drop policy if exists "Founders full access to reminder_dispatches" on public.reminder_dispatches;
 create policy "Founders full access to reminder_dispatches"
   on public.reminder_dispatches FOR ALL to authenticated
-  using (public.is_founder())
+  using (public.is_founder());
 
 -- Storage policies already specify `to authenticated`; nothing to change there.
 

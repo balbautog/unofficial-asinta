@@ -210,64 +210,64 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 -- 1. Users policies
 CREATE POLICY "Founders have full access to users" ON public.users
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can read their own profile" ON public.users
-  FOR SELECT USING (auth.uid() = id);
+  FOR SELECT TO authenticated USING (auth.uid() = id);
 
 -- 2. Projects policies
 CREATE POLICY "Founders have full access to projects" ON public.projects
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view assigned projects only" ON public.projects
-  FOR SELECT USING (public.is_supervisor_assigned(id));
+  FOR SELECT TO authenticated USING (public.is_supervisor_assigned(id));
 
 -- 3. Project Supervisors policies
 CREATE POLICY "Founders manage project supervisor assignments" ON public.project_supervisors
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view their own project assignments" ON public.project_supervisors
-  FOR SELECT USING (supervisor_id = auth.uid());
+  FOR SELECT TO authenticated USING (supervisor_id = auth.uid());
 
 -- 4. Invoices policies (Founder ONLY)
 CREATE POLICY "Founders full access to invoices" ON public.invoices
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 5. Clients policies (Founder ONLY)
 CREATE POLICY "Founders full access to clients" ON public.clients
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 6. Expenses policies (Founder ONLY)
 CREATE POLICY "Founders full access to expenses" ON public.expenses
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 7. Advances (Bale) policies (Founder ONLY)
 CREATE POLICY "Founders full access to advances" ON public.advances
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 8. Workers policies
 CREATE POLICY "Founders full access to workers" ON public.workers
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view active workers" ON public.workers
-  FOR SELECT USING (auth.uid() IS NOT NULL AND active = TRUE);
+  FOR SELECT TO authenticated USING (auth.uid() IS NOT NULL AND active = TRUE);
 
 -- 9. Attendance policies
 CREATE POLICY "Founders full access to attendance" ON public.attendance
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can read attendance for assigned projects" ON public.attendance
-  FOR SELECT USING (public.is_supervisor_assigned(project_id));
+  FOR SELECT TO authenticated USING (public.is_supervisor_assigned(project_id));
 CREATE POLICY "Supervisors can insert attendance for assigned projects" ON public.attendance
-  FOR INSERT WITH CHECK (public.is_supervisor_assigned(project_id));
+  FOR INSERT TO authenticated WITH CHECK (public.is_supervisor_assigned(project_id));
 CREATE POLICY "Supervisors can update attendance for assigned projects" ON public.attendance
-  FOR UPDATE USING (public.is_supervisor_assigned(project_id));
+  FOR UPDATE TO authenticated USING (public.is_supervisor_assigned(project_id));
 
 -- 10. Payroll policies (Founder ONLY)
 CREATE POLICY "Founders full access to payroll" ON public.payroll
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 
 -- 11. Tools policies
 CREATE POLICY "Founders full access to tools" ON public.tools
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
 CREATE POLICY "Supervisors can view tools on assigned projects" ON public.tools
-  FOR SELECT USING (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id));
+  FOR SELECT TO authenticated USING (project_id IS NOT NULL AND public.is_supervisor_assigned(project_id));
 
 -- 12. SMS logs policies (Founder ONLY)
 CREATE POLICY "Founders full access to sms_logs" ON public.sms_logs
-  FOR ALL USING (public.is_founder());
+  FOR ALL TO authenticated USING (public.is_founder());
