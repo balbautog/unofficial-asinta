@@ -21,6 +21,7 @@ import {
 import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth/authContext';
 import { useToast } from '@/components/ui/Toast';
+import { writeAuditEntry, auditFailureMessage, type AuditEntry } from '@/lib/audit/log';
 
 interface DataStoreContextType {
   // State (loaded from live Supabase PostgreSQL)
@@ -342,6 +343,28 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [supabase, showToast]
   );
 
+  /**
+   * Appends an entry to the audit trail for a money-relevant mutation.
+   *
+   * Failures are surfaced, never swallowed: the ledger write has already
+   * succeeded at this point, so saying "saved" without mentioning the missing
+   * trail entry would be a lie about the state of the books.
+   */
+  const recordAudit = useCallback(
+    async (entry: Omit<AuditEntry, 'actorId' | 'actorEmail'>) => {
+      const result = await writeAuditEntry(supabase, {
+        ...entry,
+        actorId: user?.id ?? null,
+        actorEmail: user?.email ?? null,
+      });
+      if (!result.ok) {
+        console.error('Audit trail write failed:', result.error);
+        showToast('error', auditFailureMessage('This change', result.error));
+      }
+    },
+    [supabase, user, showToast]
+  );
+
   // --- PROJECT ACTIONS ---
   const createProject = async (data: Omit<Project, 'id' | 'created_at'>): Promise<Project | null> => {
     const row = await runMutation('Create project', (db) =>
@@ -452,7 +475,16 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       db.from('invoices').insert(data).select().single()
     );
     const mapped = row ? mapInvoice(row) : null;
-    if (mapped) setInvoices((prev) => [mapped, ...prev]);
+    if (mapped) {
+      setInvoices((prev) => [mapped, ...prev]);
+      await recordAudit({
+        action: 'insert',
+        table: 'invoices',
+        recordId: mapped.id,
+        before: null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return mapped;
   };
 
@@ -471,11 +503,23 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
     }
 
+    // Snapshot BEFORE the write: this is what the trail diffs against.
+    const before = invoices.find((i) => i.id === id) ?? null;
+
     const row = await runMutation('Update invoice', (db) =>
       db.from('invoices').update(data).eq('id', id).select().single()
     );
     const mapped = row ? mapInvoice(row) : null;
-    if (mapped) setInvoices((prev) => prev.map((i) => (i.id === id ? mapped : i)));
+    if (mapped) {
+      setInvoices((prev) => prev.map((i) => (i.id === id ? mapped : i)));
+      await recordAudit({
+        action: 'update',
+        table: 'invoices',
+        recordId: id,
+        before: before as unknown as Record<string, unknown> | null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return mapped;
   };
 
@@ -492,12 +536,21 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const deleteInvoice = async (id: string): Promise<boolean> => {
+    const before = invoices.find((i) => i.id === id) ?? null;
     const ok = await runMutation('Delete invoice', async (db) => {
       const { error } = await db.from('invoices').delete().eq('id', id);
       return { data: !error, error };
     });
     if (ok) {
       setInvoices((prev) => prev.filter((i) => i.id !== id));
+      // A deletion with no snapshot would be an untraceable gap in the books.
+      await recordAudit({
+        action: 'delete',
+        table: 'invoices',
+        recordId: id,
+        before: before as unknown as Record<string, unknown> | null,
+        after: null,
+      });
       return true;
     }
     return false;
@@ -509,26 +562,53 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       db.from('expenses').insert(data).select().single()
     );
     const mapped = row ? mapExpense(row) : null;
-    if (mapped) setExpenses((prev) => [mapped, ...prev]);
+    if (mapped) {
+      setExpenses((prev) => [mapped, ...prev]);
+      await recordAudit({
+        action: 'insert',
+        table: 'expenses',
+        recordId: mapped.id,
+        before: null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return mapped;
   };
 
   const updateExpense = async (id: string, data: Partial<Expense>): Promise<Expense | null> => {
+    const before = expenses.find((e) => e.id === id) ?? null;
     const row = await runMutation('Update expense', (db) =>
       db.from('expenses').update(data).eq('id', id).select().single()
     );
     const mapped = row ? mapExpense(row) : null;
-    if (mapped) setExpenses((prev) => prev.map((e) => (e.id === id ? mapped : e)));
+    if (mapped) {
+      setExpenses((prev) => prev.map((e) => (e.id === id ? mapped : e)));
+      await recordAudit({
+        action: 'update',
+        table: 'expenses',
+        recordId: id,
+        before: before as unknown as Record<string, unknown> | null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return mapped;
   };
 
   const deleteExpense = async (id: string): Promise<boolean> => {
+    const before = expenses.find((e) => e.id === id) ?? null;
     const ok = await runMutation('Delete expense', async (db) => {
       const { error } = await db.from('expenses').delete().eq('id', id);
       return { data: !error, error };
     });
     if (ok) {
       setExpenses((prev) => prev.filter((e) => e.id !== id));
+      await recordAudit({
+        action: 'delete',
+        table: 'expenses',
+        recordId: id,
+        before: before as unknown as Record<string, unknown> | null,
+        after: null,
+      });
       return true;
     }
     return false;
@@ -546,7 +626,16 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         .single()
     );
     const mapped = row ? mapAdvance(row) : null;
-    if (mapped) setAdvances((prev) => [mapped, ...prev]);
+    if (mapped) {
+      setAdvances((prev) => [mapped, ...prev]);
+      await recordAudit({
+        action: 'insert',
+        table: 'advances',
+        recordId: mapped.id,
+        before: null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return mapped;
   };
 
@@ -570,16 +659,35 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         .single()
     );
     const mapped = row ? mapAdvance(row) : null;
-    if (mapped) setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+    if (mapped) {
+      setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+      await recordAudit({
+        action: 'update',
+        table: 'advances',
+        recordId: id,
+        before: adv as unknown as Record<string, unknown>,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return Boolean(mapped);
   };
 
   const updateAdvanceStatus = async (id: string, status: Advance['status']): Promise<boolean> => {
+    const before = advances.find((a) => a.id === id) ?? null;
     const row = await runMutation('Update advance status', (db) =>
       db.from('advances').update({ status }).eq('id', id).select().single()
     );
     const mapped = row ? mapAdvance(row) : null;
-    if (mapped) setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+    if (mapped) {
+      setAdvances((prev) => prev.map((a) => (a.id === id ? mapped : a)));
+      await recordAudit({
+        action: 'update',
+        table: 'advances',
+        recordId: id,
+        before: before as unknown as Record<string, unknown> | null,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return Boolean(mapped);
   };
 
@@ -721,6 +829,17 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     const mappedRows = (inserted as any[]).map(mapPayroll).reverse();
     setPayroll((prev) => [...mappedRows, ...prev]);
+    // One trail entry per payslip: a payroll run is N financial records, and a
+    // single summary row would not identify which payslip was created.
+    for (const payslip of mappedRows) {
+      await recordAudit({
+        action: 'insert',
+        table: 'payroll',
+        recordId: payslip.id,
+        before: null,
+        after: payslip as unknown as Record<string, unknown>,
+      });
+    }
     return mappedRows;
   };
 
@@ -752,7 +871,16 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       db.from('payroll').update({ status }).eq('id', id).select().single()
     );
     const mapped = row ? mapPayroll(row) : null;
-    if (mapped) setPayroll((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+    if (mapped) {
+      setPayroll((prev) => prev.map((p) => (p.id === id ? mapped : p)));
+      await recordAudit({
+        action: 'update',
+        table: 'payroll',
+        recordId: id,
+        before: payItem as unknown as Record<string, unknown>,
+        after: mapped as unknown as Record<string, unknown>,
+      });
+    }
     return Boolean(mapped);
   };
 

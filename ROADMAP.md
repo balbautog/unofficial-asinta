@@ -3,104 +3,132 @@
 Tracked in-repo because the GitHub issue list is empty, which meant the next
 planned work lived nowhere. Sections are ordered by intended sequence.
 
-## Done (this pass)
+Legend: **Verified** = checked in this checkout (tests, typecheck, build, smoke).
+**Needs live project** = cannot be completed or confirmed without the Supabase /
+production credentials. **Open** = known work, deliberately deferred.
 
-**Truth & safety**
-- Detected bale advances no longer auto-create a ledger entry. The old code fell
-  back to `workers[0]` when no name matched, which could create a debt against
-  an unrelated worker. A Founder now names the recipient explicitly.
-- Expense categories have a single definition (`lib/ai/categories.ts`), validated
-  in code before any write, with a test asserting it matches the SQL `CHECK`.
-- Removed the decorative `approvalRouting` / "% confidence" output. Suggestions
-  now carry `evidence` ("matched \"cement\"") and a `source` (`llm` | `rules`).
-- AI degradation is visible: the API returns why the built-in rules were used
-  instead of the model, and the UI shows it.
-- `sms_logs` writes consolidated into `lib/sms/deliver.ts` (was 4 copies). An
-  attempt is never sent without being recorded, and a simulated send is never
-  reported as success.
-- Unrecognised descriptions now fall to `other` instead of silently being filed
-  as `materials`.
+---
 
-**Cleanup**
-- Deleted `confirmAIExpense` (zero call sites), unused `.no-print`/`.print-only`
-  CSS, and the never-implemented `darkMode: ["class"]`.
-- `ai_confirmed` now records whether an AI suggestion was actually applied,
-  instead of being hardcoded `true` on every row.
-- Reminder stage boundaries live in `lib/reminders/scheduler.ts`; the reminders
-  page no longer disagrees with the cadence that fires.
-- Currency/date formatting routed through `lib/email/format.ts` (was inlined in
-  9 files); one shared ISO-date parser.
-- Status colours unified on the semantic `status-*` tokens (140 replacements
-  across 23 files). Categorical chart hues on the dashboard are intentionally
-  left as a separate scale.
+## Done — security pass (Part 1)
 
-**Accessibility & UX**
-- `ink-muted` / `ink-secondary` darkened to meet WCAG AA (2.85:1 → 5.98:1 and
-  higher) across white, surface and inset backgrounds.
-- Modal: focus trap, initial focus, focus restore, `aria-labelledby`,
-  `aria-describedby`, labelled close button, `role`/`dismissOnBackdrop` props.
-- Inputs/Textarea/Select: `useId` ids (fixes duplicate DOM ids), `aria-invalid`
-  and `aria-describedby`.
-- `aria-current="page"` on both navigation surfaces.
-- `prefers-reduced-motion` guard in `globals.css`.
-- Empty states (including filtered-to-zero) on expenses, tools, clients, users
-  and attendance; skeleton shell while the ledger loads instead of a spinner.
-- Native `confirm()` replaced with an in-app `ConfirmDialog` (3 sites).
-- Horizontal scroll on the invoice milestone and payroll breakdown tables.
+- **Next 14.2.35 advisories (incl. critical GHSA-2xp9-vwfh-vxw4, Image
+  Optimizer RCE).** Verified: `images.unoptimized: true` (optimizer disabled),
+  `images.remotePatterns` narrowed from `hostname: '**'`, no `next/image` import
+  anywhere, no `sharp` in the lockfile. The **upgrade to 16.x is the real fix**
+  and is tracked below as its own PR.
+- **Receipts bucket private + signed URLs.** Verified: migration
+  `20261006000000_security_hardening.sql` flips `storage.buckets.public = false`,
+  rewrites existing `expenses.receipt_url` values (public URL or signed URL →
+  bare storage path, tokens stripped) and clears unresolvable absolute URLs.
+  Uploads store a path; reads mint a 5-minute signed URL
+  (`lib/supabase/receipts.ts`).
+- **Security headers.** Verified: CSP (`default-src 'self'`, `object-src 'none'`,
+  `base-uri`/`form-action 'self'`, dev-permissive `frame-ancestors` for the
+  sandbox preview, `frame-ancestors 'none'` + `X-Frame-Options: DENY` + HSTS in
+  production), `nosniff`, `Referrer-Policy`, `Permissions-Policy`,
+  `X-DNS-Prefetch-Control`.
+- **Rate limiting.** Verified: sliding-window limiter (`lib/rateLimit.ts`) with
+  named per-route budgets; SMS 15/10 min, SMTP test 5/hour, email send
+  20/hour, AI extraction 12/min. Keys prefer the authenticated user id and fall
+  back to the proxy-appended client address. 429 responses carry `Retry-After`
+  and a message stating the limit and the wait.
+- **Founder MFA.** Verified: real Supabase TOTP enrolment/verification with the
+  aal1→aal2 gate (`app/mfa`, `components/auth/MfaCard.tsx`); the decorative
+  toggle that claimed MFA while doing nothing is gone. Enforcement is opt-in via
+  `MFA_ENFORCE_FOUNDERS` (rollout order in `docs/SECURITY.md` §5).
+- **SMTP `requireTLS`.** Verified: `requireTLS: true` and `minVersion: 'TLSv1.2'`
+  (dev-only opt-out via `SMTP_REQUIRE_TLS=false`).
+- **Audit log for financial mutations.** Verified: `public.audit_log` with
+  before/after JSONB, Founder-only select/insert, **no update/delete policy at
+  all**, wired into invoice / expense / advance / payroll mutations.
+- **RLS regression test.** Verified: `tests/rls-migration.test.ts` asserts RLS is
+  enabled on every migrated `public.*` table, no `using (true)` survives, and
+  every policy is scoped `to authenticated` — this caught the real finding that
+  the base schema's 23 policies had **no `TO` clause** and therefore applied to
+  `anon` as well; `20261006000002_security_hardening.sql` re-scopes all of them
+  and pins `search_path` on the `security definer` helpers.
+- **Receipt extension allowlist.** Verified: extension is derived from the MIME
+  type (never the uploaded filename), allowlist JPEG/PNG/WebP, ≤5 MB, randomised
+  object key.
+- **Seed password warning + rotation.** Verified: boxed "LOCAL DEVELOPMENT ONLY"
+  warning in `20260913000002_bale_seed.sql`, rotation SQL + procedure in
+  `docs/SECURITY.md` §9, and a test that the published demo password appears in
+  no non-seed migration.
+- **CSRF reasoning documented.** `docs/SECURITY.md` §11 (no token by design:
+  `SameSite=Lax` cookies + JSON-only bodies + no state-changing `GET`).
+- **RA 10173 compliance notes.** `docs/PRIVACY.md`: processing inventory,
+  sub-processor list, draft privacy notice, retention schedule with review
+  queries, 72-hour breach runbook, DPO/NPC-registration checkpoints.
+- **Session policy (Part 2).** Verified: idle 20 min + absolute 8 h, both
+  mirrored in `supabase/config.toml` (`[auth.sessions] inactivity_timeout`,
+  `timebox`), warning dialog before either deadline with "Stay signed in"
+  (activity only, never extends the absolute limit), countdown + spoken
+  countdown, deliberate-logout flag to distinguish an expired session from a
+  finished one.
 
-**Engineering hygiene**
-- GitHub Actions CI: typecheck, lint, tests, build.
-- `supabase/config.toml` so the documented `supabase start` works.
-- 22 new tests (71 → 93) covering categories, the categorizer's degradation
-  paths, the SMS delivery helper, formatters and reminder stage boundaries.
+## Done — AI tracks (Part 3)
 
-## Next: Track E — description → draft → confirmation
+- **Track E — one messy line → structured draft.** Verified: 35 tests. Amount
+  and date must be *quoted* in the source text or they are dropped; project and
+  vendor resolve only to real database ids; ambiguity is refused rather than
+  guessed; the model's amount is used only when its quote verifies, otherwise
+  the rules layer's reading is used *and the substitution is disclosed*.
+- **Track A — vendor memory, count-based.** Verified: `vendor_memory` records
+  accepted/overridden counts per normalised supplier token;
+  `record_vendor_outcome()` updates counters server-side; a category is
+  suggested only when the measured rate clears a stated threshold, and the
+  suggestion always carries that measurement as its evidence. No embeddings.
+- **Track C — duplicate & outlier detection (arithmetic).** Verified: same
+  amount ±₱0.01 within 7 days **and** (same project **or** same supplier);
+  different named suppliers in the same project are explicitly *not* duplicates;
+  outliers are median-based with a minimum-history guard; receipts are required
+  at ₱5,000; ledger-wide pair de-duplication.
+- **Track B — receipt photo → draft.** Verified: Groq vision with the image sent
+  as a base64 data URI (never a signed URL), 4 MB cap, current model IDs
+  (`qwen/qwen3.8-27b`; Llama 4 Scout is retired on the free tier), degrade to
+  manual entry with the reason shown.
+- **Track D — voice → draft.** Verified: `whisper-large-v3-turbo`, name-seeded
+  prompt built from real worker/project/supplier names (700-char cap under the
+  224-token limit), 20 MB guard, transcription is transcription — the draft still
+  has to pass the same no-invented-values gate as text.
+- **Model IDs are data, not code.** All three resolve through `lib/ai/models.ts`
+  with environment overrides and are reported by `/api/integrations/status`,
+  because Groq retired both model IDs this app had been using.
 
-The highest-value addition and the cheapest entry into the extraction engine.
-One messy line ("12 bags cement at JMC for Casa Batangas, 4800, kahapon") prefills
-project, category, amount, date, vendor and notes; the Founder confirms. B, D and
-E below all reduce to one "structured draft from messy input" function.
+## Open — security (deliberately deferred)
 
-Rules for it: never invent a value (missing amount stays empty, never guessed),
-and map to real database ids only — a model returning free-text project names is
-unusable and would fail the insert.
+- **Upgrade off Next 14.x (its own PR).** 14.x receives no more security
+  patches; the header/optimizer work is a mitigation, not a fix. Target 16.3.8+
+  (or 15.5.24+), expect React 19 and App Router changes, and re-run the full
+  test suite plus the runtime smoke checks. **Never `npm audit fix --force`.**
+- **Remove `'unsafe-inline'` from `script-src`.** Requires a per-request nonce
+  threaded through middleware — real work, not faked.
+- **Rate limiter is single-instance.** Counters are in-process; the honest
+  limitation is documented in `docs/SECURITY.md` §7. A multi-instance deploy
+  needs a shared store (Upstash Redis / a Supabase table) behind the same
+  `checkRateLimit` interface.
+- **Login brute force is not covered by this limiter** — the browser talks
+  directly to Supabase Auth. Configure Supabase's own rate limits (and consider
+  CAPTCHA) per `docs/SECURITY.md` §7.
+- **Audit-log viewer** — the trail is query-only via SQL today; a Founder-facing
+  view is a candidate follow-up.
 
-## Later: AI tracks
+## Needs live project (blocked, not abandoned)
 
-| Track | What | Notes |
-| --- | --- | --- |
-| A | Vendor memory — learn category per supplier from Founder overrides | Count-based, inspectable. Must **not** become embeddings/vector search. |
-| C | Duplicate & outlier detection | Arithmetic. "Same supplier + amount within N days". |
-| B | Receipt photo → draft | Groq vision (Llama 4 Scout, currently Preview). Assistive only. |
-| D | Voice → draft | Whisper large-v3-turbo, seeded with worker/supplier names for Taglish. |
-
-### Schema decision required before Track A/E
-
-- `ai_approval_suggestion` — decorative, no longer written. **Drop it** (needs a
-  migration) or keep the column unused.
-- `ai_confirmed` — now meaningful (set only when a suggestion was applied). Keep.
-
-## Security (separate workstream)
-
-Not started, tracked for its own pass:
-
-- **Critical:** Next.js 14.2.35 carries RCE/DoS advisories, one with no 14.x
-  patch (GHSA-2xp9-vwfh-vxw4, AVIF image optimizer). `next/image` is unused, so
-  disable the optimizer now (`images: { unoptimized: true }`) and plan the
-  upgrade to 16.3.3+/15.5.24+. If `sharp` is ever added, require ≥0.35.4.
-- **High:** receipts storage bucket is `public: true` → private + signed URLs.
-- **High:** no security headers (clickjacking risk on approve/pay actions).
-- **High:** no rate limiting; no MFA on Founder accounts; SMTP `requireTLS`
-  unset.
-- **Medium:** no audit log for financial mutations; backups/PITR unverified.
-- **Compliance:** PH Data Privacy Act (RA 10173) obligations — privacy notice,
-  retention, 72-hour breach notification, DPO, NPC registration.
-- Session security: Supabase inactivity + absolute timeouts, and the
-  "are you still there?" warning dialog (`role="alertdialog"`,
-  `dismissOnBackdrop={false}` — both props already exist on `Modal`).
+- **Apply migrations** `2026100600000{0,1,2}_*.sql` to a real project, then
+  smoke-test: bucket is private, an old receipt still opens (re-attach if not —
+  the backfill clears URLs it cannot resolve), a mutation writes an audit row.
+- **Backups/PITR:** verify the plan, then **perform and record a test restore**
+  (table in `docs/SECURITY.md` §10 — currently marked not performed).
+- **MFA rollout:** deploy with `MFA_ENFORCE_FOUNDERS=false` → both founders
+  enrol → flip to `true` → confirm a Founder without a code is redirected.
+- **Session fields** in the managed dashboard must match `supabase/config.toml`
+  (20 min idle / 8 h absolute); `config.toml` only governs the local stack.
 
 ## Backlog
 
 - `store.tsx` and component tests (coverage is server-logic only).
 - Adopt `isSupabaseConfigured()` fail-fast path in more entry points if needed.
 - Navbar timestamp still uses a raw `toLocaleString` (datetime, not currency).
+- Automated data-retention purge (see `docs/PRIVACY.md` §5) — manual review is
+  the current answer.

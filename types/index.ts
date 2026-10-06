@@ -82,11 +82,19 @@ export interface Expense {
   category: ExpenseCategory;
   amount: number;
   expense_date: string;
+  /** Storage PATH inside the private `receipts` bucket (not a URL). */
   receipt_url: string | null;
   notes: string | null;
+  /**
+   * Supplier / shop name — the key for vendor memory (lib/ai/vendorMemory.ts)
+   * and for duplicate detection (lib/expenses/anomalies.ts). Prefilled by the
+   * AI draft, editable by the Founder, never a financial value itself.
+   */
+  vendor?: string | null;
   ai_category_suggestion: ExpenseCategory | null;
   ai_bale_detection: boolean | null;
-  ai_approval_suggestion: string | null;
+  /* `ai_approval_suggestion` was dropped by migration 20261006000001: it held a
+     decorative routing string that nothing read. */
   ai_confirmed: boolean;
   created_by: string;
   created_at: string;

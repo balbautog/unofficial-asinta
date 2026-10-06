@@ -4,6 +4,8 @@ import {
   UNCLASSIFIED_EXPENSE_CATEGORY,
   type ExpenseCategory,
 } from '@/lib/ai/categories';
+import { requestGroqJson } from '@/lib/ai/groqClient';
+import { getTextModel } from '@/lib/ai/models';
 
 /**
  * Expense categorization: API-assisted, rule-based decision support.
@@ -18,9 +20,15 @@ import {
  * and reports WHY in `degradedReason` — degradation is visible, never silent.
  */
 
-export const GROQ_MODEL = 'llama-3.3-70b-versatile';
-
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+/**
+ * The text model currently used for classification.
+ *
+ * This was hardcoded to `llama-3.3-70b-versatile`, which Groq retired on
+ * 2026-08-16 — every call was failing and silently falling back to the rule
+ * layer. Model IDs live in lib/ai/models.ts now and are overridable by
+ * environment variable, because Groq retires models on a schedule of months.
+ */
+export const GROQ_MODEL = getTextModel();
 
 export type CategorizationSource = 'llm' | 'rules';
 
@@ -191,66 +199,39 @@ export async function analyzeExpenseWithAI(description: string): Promise<AICateg
     return withDegradation(rules, 'GROQ_API_KEY is not configured — using built-in rules.');
   }
 
-  try {
-    const response = await fetch(GROQ_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: buildSystemPrompt() },
-          { role: 'user', content: `Expense description: "${description}"` },
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-      }),
-    });
+  const result = await requestGroqJson({
+    model: GROQ_MODEL,
+    system: buildSystemPrompt(),
+    user: `Expense description: "${description}"`,
+    temperature: 0.1,
+  });
 
-    if (!response.ok) {
-      console.warn(`Groq categorization unavailable (HTTP ${response.status}); using built-in rules.`);
-      return withDegradation(rules, `Groq returned HTTP ${response.status} — using built-in rules.`);
-    }
-
-    const data = await response.json().catch(() => null);
-    const content = data?.choices?.[0]?.message?.content;
-
-    if (typeof content !== 'string' || !content.trim()) {
-      return withDegradation(rules, 'Groq returned an empty response — using built-in rules.');
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(content);
-    } catch {
-      return withDegradation(rules, 'Groq returned a response that could not be parsed.');
-    }
-
-    // Validate before the suggestion can reach the database: an out-of-enum
-    // category would otherwise fail the CHECK constraint mid-write.
-    if (!isExpenseCategory(parsed?.category)) {
-      return withDegradation(
-        rules,
-        `Groq returned an unsupported category (${String(parsed?.category)}) — using built-in rules.`
-      );
-    }
-
-    const reasoning =
-      typeof parsed?.reasoning === 'string' && parsed.reasoning.trim()
-        ? parsed.reasoning.trim()
-        : 'Classified by the Groq model.';
-
-    return {
-      category: parsed.category,
-      isBale: Boolean(parsed?.isBale),
-      reasoning,
-      evidence: [`Classified by ${GROQ_MODEL}`],
-      source: 'llm',
-    };
-  } catch (error) {
-    console.warn('Groq API request failed; using built-in rules.', error);
-    return withDegradation(rules, 'The Groq request failed — using built-in rules.');
+  if (!result.ok) {
+    console.warn(`Groq categorization unavailable (${result.reason}); using built-in rules.`);
+    return withDegradation(rules, `${result.reason} Using built-in rules instead.`);
   }
+
+  const parsed = result.parsed as Record<string, unknown> | null;
+
+  // Validate before the suggestion can reach the database: an out-of-enum
+  // category would otherwise fail the CHECK constraint mid-write.
+  if (!isExpenseCategory(parsed?.category)) {
+    return withDegradation(
+      rules,
+      `Groq returned an unsupported category (${String(parsed?.category)}) — using built-in rules.`
+    );
+  }
+
+  const reasoning =
+    typeof parsed?.reasoning === 'string' && parsed.reasoning.trim()
+      ? parsed.reasoning.trim()
+      : 'Classified by the Groq model.';
+
+  return {
+    category: parsed.category,
+    isBale: Boolean(parsed?.isBale),
+    reasoning,
+    evidence: [`Classified by ${GROQ_MODEL}`],
+    source: 'llm',
+  };
 }

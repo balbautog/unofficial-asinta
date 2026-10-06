@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireFounder } from '@/lib/auth/serverRole';
 import { normalizePhilippineMobile } from '@/lib/sms/phone';
 import { sendPhilSMS } from '@/lib/sms/philsms';
+import { enforceRateLimit } from '@/lib/api/rateLimitGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
   if (!founder.ok) {
     return NextResponse.json({ error: founder.error }, { status: founder.status });
   }
+
+  const limited = enforceRateLimit('integrationTest', req.headers, founder.userId);
+  if (limited) return limited;
 
   const body = await req.json().catch(() => null);
   const phone = normalizePhilippineMobile(typeof body?.phone === 'string' ? body.phone : null);

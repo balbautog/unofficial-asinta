@@ -3,6 +3,7 @@ import './globals.css';
 import { ToastProvider } from '@/components/ui/Toast';
 import { AuthProvider } from '@/lib/auth/authContext';
 import { DataStoreProvider } from '@/lib/data/store';
+import { SessionWatcher } from '@/components/auth/SessionWatcher';
 
 export const metadata: Metadata = {
   title: 'BALE | Billing & Advance Ledger Engine — Asinta Architects',
@@ -20,7 +21,12 @@ export default function RootLayout({
       <body className="bg-surface text-ink-primary antialiased min-h-screen">
         <ToastProvider>
           <AuthProvider>
-            <DataStoreProvider>{children}</DataStoreProvider>
+            <DataStoreProvider>
+              {children}
+              {/* Idle-session warning + honest sign-out notice. Renders nothing
+                  when there is no session or while the session is healthy. */}
+              <SessionWatcher />
+            </DataStoreProvider>
           </AuthProvider>
         </ToastProvider>
       </body>

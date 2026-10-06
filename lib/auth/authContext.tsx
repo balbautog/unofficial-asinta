@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { User, UserRole } from '@/types';
 import { createClient } from '@/lib/supabase/client';
+import { DELIBERATE_LOGOUT_STORAGE_KEY } from '@/lib/auth/session';
 
 interface AuthContextType {
   user: User | null;
@@ -188,6 +189,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
+    // Tell the session watcher this was a choice, so the login page does not
+    // claim "you were signed out after inactivity" after a deliberate logout.
+    try {
+      window.sessionStorage.setItem(DELIBERATE_LOGOUT_STORAGE_KEY, '1');
+    } catch {
+      // Non-fatal: the worst case is a slightly confusing notice.
+    }
     await supabase.auth.signOut();
     loadedProfileIdRef.current = null;
     setUser(null);

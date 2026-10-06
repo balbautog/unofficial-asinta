@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
@@ -36,6 +37,18 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, isFounder, isLoading: authLoading } = useAuth();
   const { isLoaded, loadError, refresh } = useDataStore();
+  const router = useRouter();
+
+  // A session can end while a protected page is open (idle timeout, revoked
+  // session, expiry). Showing the Founder "Restricted Business Portal" in that
+  // case blames the wrong person, so send them to sign-in instead — the login
+  // page explains what happened.
+  const sessionGone = !authLoading && !user;
+  useEffect(() => {
+    if (!sessionGone) return;
+    const timer = window.setTimeout(() => router.replace('/'), 600);
+    return () => window.clearTimeout(timer);
+  }, [router, sessionGone]);
 
   // 0. Fail fast and say exactly what is wrong when the environment is not
   //    configured, instead of surfacing a vague network error later.
@@ -62,7 +75,17 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
     );
   }
 
-  // 1. Wait until the Supabase session has been resolved.
+  // 1a. The session ended while this page was open.
+  if (sessionGone) {
+    return (
+      <SyncState
+        title="Your session ended"
+        subtitle="Returning to the sign-in page. Nothing already saved to the ledger is affected."
+      />
+    );
+  }
+
+  // 1b. Wait until the Supabase session has been resolved.
   if (authLoading) {
     return (
       <SyncState

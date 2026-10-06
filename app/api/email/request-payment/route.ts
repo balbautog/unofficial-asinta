@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireFounder } from '@/lib/auth/serverRole';
 import { getFirmEmailIdentity, isSmtpConfigured, sendEmail } from '@/lib/email/mailer';
 import { sendRequestForPayment } from '@/lib/email/service';
+import { enforceRateLimit } from '@/lib/api/rateLimitGuard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,6 +23,9 @@ export async function POST(req: NextRequest) {
     if (!founder.ok) {
       return NextResponse.json({ error: founder.error }, { status: founder.status });
     }
+
+    const limited = enforceRateLimit('emailSend', req.headers, founder.userId);
+    if (limited) return limited;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') {

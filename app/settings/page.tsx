@@ -4,15 +4,19 @@ import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useDataStore } from '@/lib/data/store';
 import { useAuth } from '@/lib/auth/authContext';
-import { Building2, Shield, Bot, Database, RefreshCw } from 'lucide-react';
+import { Building2, Bot, Database, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { TemplateEditorCard } from '@/components/email/TemplateEditorCard';
 import { TestEmailCard } from '@/components/email/TestEmailCard';
+import { MfaCard } from '@/components/auth/MfaCard';
 
 interface IntegrationStatus {
   groqModel?: string;
+  groqVisionModel?: string;
+  groqTranscriptionModel?: string;
+  mfaEnforcedForFounders?: boolean;
   groqConfigured: boolean;
   philsmsConfigured: boolean;
   philsmsSenderId?: string;
@@ -25,7 +29,6 @@ export default function SettingsPage() {
   const { isFounder } = useAuth();
   const { refresh, isLoading, isLoaded } = useDataStore();
 
-  const [mfaEnabled, setMfaEnabled] = useState(false);
   const [isResyncing, setIsResyncing] = useState(false);
   const [integrationStatus, setIntegrationStatus] = useState<IntegrationStatus | null>(null);
   const [testPhone, setTestPhone] = useState('');
@@ -147,43 +150,10 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Optional Founder MFA (Section 13) */}
-        {isFounder && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center space-x-2.5">
-                <Shield className="w-5 h-5 text-navy" />
-                <CardTitle>Founder Security & Supabase MFA</CardTitle>
-              </div>
-              <CardDescription>
-                Multi-Factor Authentication (TOTP / Authenticator App) for Founder accounts
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs">
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-inset/60 border border-surface-border">
-                <div className="space-y-0.5">
-                  <div className="font-bold text-navy">Founder Multi-Factor Authentication</div>
-                  <div className="text-ink-secondary">
-                    Require a one-time passcode from an authenticator app when accessing financial ledgers.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMfaEnabled(!mfaEnabled)}
-                  className={`w-12 h-6 flex items-center rounded-full p-1 transition-colors ${
-                    mfaEnabled ? 'bg-navy' : 'bg-slate-300'
-                  }`}
-                >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      mfaEnabled ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Founder MFA — real Supabase TOTP enrolment. The previous control was a
+            toggle that changed React state and nothing else, so the UI claimed a
+            protection that did not exist. */}
+        {isFounder && <MfaCard />}
 
         {/* AI & SMS Integrations */}
         {isFounder && (
@@ -211,15 +181,37 @@ export default function SettingsPage() {
                           : 'Not Configured'}
                     </Badge>
                   </div>
-                  <div className="text-ink-secondary">
-                    Model:{' '}
-                    <span className="font-mono text-navy font-semibold">
-                      {integrationStatus?.groqModel || '—'}
-                    </span>
+                  <div className="text-ink-secondary space-y-0.5">
+                    <div>
+                      Text model:{' '}
+                      <span className="font-mono text-navy font-semibold">
+                        {integrationStatus?.groqModel || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      Receipt (vision):{' '}
+                      <span className="font-mono text-navy font-semibold">
+                        {integrationStatus?.groqVisionModel || '—'}
+                      </span>
+                    </div>
+                    <div>
+                      Voice (speech-to-text):{' '}
+                      <span className="font-mono text-navy font-semibold">
+                        {integrationStatus?.groqTranscriptionModel || '—'}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-[11px] text-ink-muted">
-                    Suggests an expense category and flags possible worker bale advances. Every
-                    suggestion is confirmed by a Founder before it reaches the ledger.
+                    Suggests an expense category, drafts expenses from one messy line, reads receipt
+                    photos, and transcribes voice notes. Every suggestion is confirmed by a Founder
+                    before it reaches the ledger, and model IDs are overridable by environment
+                    variable because Groq retires models regularly.
+                  </div>
+                  <div className="text-[11px] text-ink-muted">
+                    Founder two-factor enforcement:{' '}
+                    <span className="font-semibold text-navy">
+                      {integrationStatus?.mfaEnforcedForFounders ? 'enabled' : 'not enabled (enrolment available)'}
+                    </span>
                   </div>
                   <div className="text-[11px] text-ink-muted">
                     Without a key, expense entry still works — the built-in rule categorizer is used
