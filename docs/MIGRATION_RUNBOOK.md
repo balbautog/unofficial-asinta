@@ -11,7 +11,114 @@ step 4, and step 4 is reversible via the transaction the bundle runs inside.
 
 ---
 
+## 0. If you are picking this up cold: verify the fixes are present
+
+The migration SQL in `supabase/migrations` has twice been corrected after a
+sandbox reset silently reverted it, and once after a version reached a live
+project still broken. **Verify by file content, not by commit id** — a commit
+may not exist while the corrected files do, or the other way round.
+
+Five checks. All five must pass. Run them from the repository root.
+
+```bash
+[ -d node_modules ] || npm ci      # node_modules is never in the sandbox snapshot
+```
+
+**1. Every `create policy` in the base schema and the communications migration
+names its role.**
+
+```bash
+grep -c "TO authenticated" supabase/migrations/20260913000000_bale_schema.sql    # expect 20
+grep -c "TO authenticated" supabase/migrations/20260929000000_communications.sql # expect 3
+```
+
+**2. No statement in the hardening migration lost its semicolon.**
+
+```bash
+python3 - <<'EOF'
+import re, pathlib
+t = pathlib.Path('supabase/migrations/20261006000000_security_hardening.sql').read_text()
+body = t[t.index('-- 3. Scope every existing policy'):t.index('-- 4. Function hardening')]
+chunks = [c.strip() for c in body.split(';') if c.strip()]
+merged = [c for c in chunks if len(re.findall(r'\b(?:create|drop)\s+policy\b', c, re.I)) > 1]
+print(f"merged statements (must be 0): {len(merged)}")
+print(f"create: {len(re.findall('create policy', body, re.I))}  drop: {len(re.findall('drop policy if exists', body, re.I))}")
+EOF
+```
+
+Expect `merged statements (must be 0): 0`, `create: 23`, `drop: 23`.
+
+**3. These files exist.**
+
+```bash
+ls supabase/apply/{preflight,seed-cleanup,upgrade-hardening,verify-live}.sql \
+   tests/migrations-parse.test.ts docs/GO_LIVE_CHECKLIST.md
+```
+
+**4. The two MIGRATION bundles are seed-free.** (`preflight.sql` and
+`seed-cleanup.sql` mention the demo password deliberately — they exist to
+detect and rotate it. Only `fresh-install.sql` and `upgrade-hardening.sql` must
+never contain seed content.)
+
+```bash
+grep -l asinta2026 supabase/apply/fresh-install.sql supabase/apply/upgrade-hardening.sql \
+  && echo "LEAKED — regenerate with npm run build:apply-sql" \
+  || echo "clean"
+```
+
+**5. The parse test and the full suite pass.**
+
+```bash
+npm run build:apply-sql
+./node_modules/.bin/tsc --noEmit && npm run lint && npm test && npm run build
+```
+
+Use `./node_modules/.bin/tsc`, never `npx tsc` — the latter can resolve an
+unrelated `tsc` package from the registry.
+
+Expected: **19 test files, 243 tests, all passing.**
+
+### Re-applying the corrections
+
+If any check fails, re-apply the correction. Both are mechanical.
+
+**Missing semicolons** — in `20261006000000_security_hardening.sql` §3, every
+`create policy` block ends with `using (…)` or `with check (…)` followed by a
+newline and the next `drop policy` line. Add `;` to the end of each
+`using (…)` / `with check (…)` line.
+
+Without it, PostgreSQL reads the `drop` as part of the `create` and reports
+**`syntax error at or near "drop"`**. The SQL editor runs a script as one
+implicit transaction, so that one error rolls back the whole file. The
+follow-up error **`relation "public.audit_log" does not exist`** is a *symptom*
+of that rollback, not a separate bug — fix the semicolons and both go away.
+
+**Unscoped policies** — in `20260913000000_bale_schema.sql` and
+`20260929000000_communications.sql`, insert ` TO authenticated` immediately
+before every `USING` / `WITH CHECK` that follows a
+`FOR ALL|SELECT|INSERT|UPDATE|DELETE` clause. A policy with no `TO` clause
+defaults to PUBLIC, which includes `anon`.
+
+**Then prove the tests are not no-ops.** Reintroduce a defect into a copy of a
+migration — drop a semicolon, or strip a policy's role — and confirm the
+relevant test goes red. A guard that passes on broken input is worse than no
+guard, which is exactly how both defects reached a live project.
+
+### Who catches what
+
+| Defect | `rls-migration.test.ts` (text) | `migrations-parse.test.ts` (parser) |
+| --- | --- | --- |
+| missing semicolon | **no** — `split(';')` reads the merged chunk as one statement | **yes** — the grammar rejects the file |
+| policy with no `TO` clause | unreliable — matches `to authenticated` on a neighbouring statement | **yes** — reads the grantee from the parse tree |
+
+---
+
 ## 1. Pre-flight — what has already been applied?
+
+**Use `supabase/apply/preflight.sql`** — it is read-only, returns one row per
+item, and also reports the two ordering dependencies and the next step for your
+specific project. The query below is the short form it grew out of; keep it
+only if you want the single-row version.
 
 Paste into **Supabase → SQL Editor** and run:
 
@@ -36,6 +143,20 @@ select
     else 'already migrated — just run supabase/apply/verify-live.sql'
   end as next_step;
 ```
+
+`preflight.sql` additionally reports **two ordering dependencies** that the
+query above cannot see, and which are the difference between a bundle that
+applies and one that silently rolls back:
+
+1. **`20260929000000_communications.sql` must run BEFORE
+   `upgrade-hardening.sql`.** The hardening migration re-scopes policies on
+   `email_templates`, `email_logs` and `reminder_dispatches` — three tables
+   only that migration creates. Miss it and the bundle dies on
+   `relation "public.email_templates" does not exist`, and the transaction
+   takes the whole bundle with it.
+2. **The two bundles are mutually exclusive.** `fresh-install.sql` is for an
+   empty project and is *not* idempotent; `upgrade-hardening.sql` *requires*
+   the base schema to already be there. Never run both.
 
 Result interpretation:
 
