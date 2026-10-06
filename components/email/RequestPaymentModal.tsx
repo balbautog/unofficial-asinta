@@ -172,7 +172,7 @@ export const RequestPaymentModal: React.FC<RequestPaymentModalProps> = ({
       )}
 
       {!isLoading && error && !preview && (
-        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-status-danger text-xs flex items-center space-x-2">
+        <div className="p-4 rounded-xl bg-status-danger-bg border border-status-danger/20 text-status-danger text-xs flex items-center space-x-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
@@ -181,9 +181,9 @@ export const RequestPaymentModal: React.FC<RequestPaymentModalProps> = ({
       {!isLoading && preview && sendResult && (
         <div className="space-y-4 text-xs">
           {sendResult.status === 'accepted' ? (
-            <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-2">
+            <div className="p-5 rounded-2xl bg-status-success-bg border border-status-success/20 text-status-success space-y-2">
               <div className="flex items-center space-x-2 font-bold text-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <CheckCircle2 className="w-5 h-5 text-status-success" />
                 <span>Accepted by mail server</span>
               </div>
               <p>
@@ -193,17 +193,17 @@ export const RequestPaymentModal: React.FC<RequestPaymentModalProps> = ({
                   ' (This confirmation key was already processed — no duplicate email was sent.)'}
               </p>
               {sendResult.providerMessageId && (
-                <p className="font-mono text-[11px] text-emerald-700">
+                <p className="font-mono text-[11px] text-status-success">
                   SMTP Message ID: {sendResult.providerMessageId}
                 </p>
               )}
-              <p className="text-[11px] text-emerald-700">
+              <p className="text-[11px] text-status-success">
                 Acceptance by the mail server is not proof of inbox delivery. The exact email
                 content has been stored in the invoice email history.
               </p>
             </div>
           ) : (
-            <div className="p-5 rounded-2xl bg-rose-50 border border-rose-200 text-status-danger space-y-2">
+            <div className="p-5 rounded-2xl bg-status-danger-bg border border-status-danger/20 text-status-danger space-y-2">
               <div className="flex items-center space-x-2 font-bold text-sm">
                 <AlertCircle className="w-5 h-5" />
                 <span>Sending failed</span>
@@ -275,7 +275,7 @@ export const RequestPaymentModal: React.FC<RequestPaymentModalProps> = ({
               </div>
               <div>
                 <div className="text-ink-secondary">Amount Paid</div>
-                <div className="font-bold text-emerald-700 mt-0.5">
+                <div className="font-bold text-status-success mt-0.5">
                   {formatPeso(preview.invoice.amountPaid)}
                 </div>
               </div>
@@ -289,14 +289,14 @@ export const RequestPaymentModal: React.FC<RequestPaymentModalProps> = ({
           </div>
 
           {error && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-status-danger flex items-center space-x-2">
+            <div className="p-3 rounded-xl bg-status-danger-bg border border-status-danger/20 text-status-danger flex items-center space-x-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {preview.warnings?.length > 0 && (
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+            <div className="p-3 rounded-xl bg-status-warning-bg border border-status-warning/20 text-status-warning">
               Warning: the message is missing important billing placeholders:{' '}
               <span className="font-mono font-semibold">{preview.warnings.join(', ')}</span>
             </div>

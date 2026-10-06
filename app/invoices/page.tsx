@@ -24,6 +24,7 @@ import { RequestPaymentModal } from '@/components/email/RequestPaymentModal';
 import { EmailHistoryModal } from '@/components/email/EmailHistoryModal';
 import { buildReminderSMS, estimateSMSSegments } from '@/lib/sms/templates';
 import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { formatPeso } from '@/lib/email/format';
 
 function getNextInvoiceNumber(invoices: Invoice[], year: number): string {
   const prefix = `ASINTA-${year}-`;
@@ -122,8 +123,7 @@ export default function InvoicesPage() {
     status: 'pending' as InvoiceStatus,
   });
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const formatPHP = formatPeso;
 
   const filteredInvoices = invoices.filter((inv) => {
     const proj = projects.find((p) => p.id === inv.project_id);
@@ -329,7 +329,7 @@ export default function InvoicesPage() {
                       <div className="text-ink-secondary">Total / Balance</div>
                       <div className="font-bold text-navy mt-0.5">{formatPHP(inv.amount)}</div>
                       {balance > 0 && (
-                        <div className="text-[11px] text-amber-700 font-medium">Bal: {formatPHP(balance)}</div>
+                        <div className="text-[11px] text-status-warning font-medium">Bal: {formatPHP(balance)}</div>
                       )}
                     </div>
                   </div>
@@ -513,7 +513,7 @@ export default function InvoicesPage() {
               <div className="text-ink-secondary">
                 Total: {formatPHP(selectedInvoice.amount)} · Currently Paid: {formatPHP(selectedInvoice.amount_paid)}
               </div>
-              <div className="font-semibold text-amber-800">
+              <div className="font-semibold text-status-warning">
                 Remaining Balance: {formatPHP(selectedInvoice.amount - selectedInvoice.amount_paid)}
               </div>
             </div>
@@ -600,7 +600,7 @@ export default function InvoicesPage() {
                 </div>
 
                 {/* Milestone Table */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <div className="border border-slate-200 rounded-xl overflow-x-auto">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-slate-100 text-navy font-bold uppercase text-[11px] border-b border-slate-200">
                       <tr>
@@ -631,7 +631,7 @@ export default function InvoicesPage() {
                       <span className="text-ink-secondary">Total Invoiced:</span>
                       <span className="font-bold font-mono text-navy">{formatPHP(selectedInvoice.amount)}</span>
                     </div>
-                    <div className="flex justify-between text-emerald-800">
+                    <div className="flex justify-between text-status-success">
                       <span>Amount Received:</span>
                       <span className="font-bold font-mono">({formatPHP(selectedInvoice.amount_paid)})</span>
                     </div>
@@ -691,8 +691,8 @@ export default function InvoicesPage() {
         {selectedInvoice && (
           <div className="space-y-4 text-xs">
             {smsSuccess ? (
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-semibold">
-                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+              <div className="p-4 rounded-xl bg-status-success-bg border border-status-success/20 text-status-success text-center font-semibold">
+                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-status-success" />
                 {smsSuccess}
               </div>
             ) : (

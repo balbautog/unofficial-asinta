@@ -111,7 +111,7 @@ export const TestEmailCard: React.FC = () => {
         </div>
 
         {needsConfirmation && (
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
+          <div className="p-3 rounded-xl bg-status-warning-bg border border-status-warning/20 text-status-warning space-y-2">
             <p>
               You are sending the test to{' '}
               <span className="font-mono font-bold">{effectiveTo}</span>, which is different from
@@ -137,8 +137,8 @@ export const TestEmailCard: React.FC = () => {
           <div
             className={`p-3 rounded-xl border flex items-start space-x-2 ${
               result.ok
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-rose-50 border-rose-200 text-status-danger'
+                ? 'bg-status-success-bg border-status-success/20 text-status-success'
+                : 'bg-status-danger-bg border-status-danger/20 text-status-danger'
             }`}
           >
             {result.ok ? (

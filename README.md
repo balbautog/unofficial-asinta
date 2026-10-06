@@ -18,6 +18,28 @@ localStorage fallbacks.
 | Receipts | Supabase Storage bucket `receipts`; public URL saved to `expenses.receipt_url` |
 | Security | Every query carries the signed-in user's JWT so Row Level Security is enforced end-to-end |
 
+## Project status
+
+- Open work is tracked in [`ROADMAP.md`](ROADMAP.md) (the GitHub issue list is empty).
+- CI runs on every push and pull request: typecheck, lint, unit tests, build.
+- 93 unit tests cover the communicatons pipeline, reminder scheduling, the
+  expense categorizer and shared formatters. `lib/data/store.tsx` and the React
+  pages are not yet covered.
+
+### Expense categorisation (how the "AI" behaves)
+
+Categorisation is **API-assisted, rule-based decision support**:
+
+1. **Extraction** may come from the Groq model (when `GROQ_API_KEY` is set) or
+   from the built-in rule layer.
+2. **Decisions** stay in inspectable code. The model never writes to the ledger
+   and no approval is automated.
+3. Every suggestion is confirmed by a Founder before it is saved.
+
+Results report `source` (`llm` | `rules`) and `evidence` (the matched keywords or
+the model that classified it). If the model is missing or unusable, the API says
+why via `degradedReason` — expense entry keeps working with AI fully off.
+
 ## Setup
 
 1. **Create a Supabase project** at [supabase.com](https://supabase.com) (or run

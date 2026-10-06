@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function ClientsPage() {
   const { clients, projects, invoices, createClient, updateClient, deleteClient } = useDataStore();
@@ -24,6 +26,7 @@ export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const [formData, setFormData] = useState({
@@ -70,9 +73,14 @@ export default function ClientsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Remove client ${name}?`)) {
-      await deleteClient(id);
-    }
+    setPendingDelete({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setPendingDelete(null);
+    await deleteClient(target.id);
   };
 
   return (
@@ -159,7 +167,7 @@ export default function ClientsPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(client.id, client.name)}
-                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50"
+                        className="p-1.5 rounded-lg text-status-danger hover:bg-status-danger-bg"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -211,12 +219,37 @@ export default function ClientsPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-ink-secondary">Total Settled</div>
-                    <div className="font-bold text-emerald-800 text-sm">₱{totalPaid.toLocaleString()}</div>
+                    <div className="font-bold text-status-success text-sm">₱{totalPaid.toLocaleString()}</div>
                   </div>
                 </div>
               </div>
             );
           })}
+
+          {filteredClients.length === 0 && (
+            <div className="md:col-span-2 bg-white rounded-3xl border border-surface-border">
+              <EmptyState
+                title="No clients to show"
+                description={
+                  clients.length === 0
+                    ? 'Register a client to start issuing invoices and payment requests.'
+                    : 'No client matches the current search.'
+                }
+                action={
+                  clients.length === 0 ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAddModalOpen(true)}
+                      leftIcon={<Plus className="w-3.5 h-3.5" />}
+                    >
+                      Register Client
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -290,6 +323,16 @@ export default function ClientsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title="Remove client"
+        message={pendingDelete ? `Remove ${pendingDelete.name}? This cannot be undone.` : ''}
+        confirmLabel="Remove client"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </AppShell>
   );
 }

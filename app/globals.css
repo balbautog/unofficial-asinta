@@ -10,7 +10,9 @@
     --card-surface: #FFFFFF;
     --border-subtle: #DDE3EA;
     --text-primary: #172033;
-    --text-secondary: #667085;
+    /* Contrast-corrected to WCAG AA (4.5:1) — see tailwind.config.js */
+    --text-secondary: #4E5A6B;
+    --text-muted: #5A6474;
   }
 
   * {
@@ -121,17 +123,25 @@
   }
 }
 
+/* Respect the operating system's reduced-motion preference. The app uses
+   hover transforms, `animate-in` transitions and spinners; without this,
+   users who ask for less motion still receive all of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Print styling for Payslips and Invoices */
 @media print {
   body {
     background-color: #FFFFFF !important;
     color: #000000 !important;
-  }
-  .no-print {
-    display: none !important;
-  }
-  .print-only {
-    display: block !important;
   }
   .neu-card, .neu-panel, .neu-card-surface {
     box-shadow: none !important;

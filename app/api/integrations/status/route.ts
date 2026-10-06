@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { isSmtpConfigured } from '@/lib/email/mailer';
 import { isGlobalAutomaticRemindersEnabled } from '@/lib/reminders/scheduler';
+import { GROQ_MODEL } from '@/lib/ai/groq';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ export async function GET() {
   return NextResponse.json(
     {
       groqConfigured: Boolean(process.env.GROQ_API_KEY),
+      groqModel: GROQ_MODEL,
       philsmsConfigured: Boolean(process.env.PHILSMS_API_KEY),
       philsmsSenderId: process.env.PHILSMS_SENDER_ID || 'PhilSMS',
       supabaseConfigured: Boolean(

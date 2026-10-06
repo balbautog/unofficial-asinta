@@ -6,10 +6,19 @@
  * directly.
  */
 
-export const MANILA_TIME_ZONE = 'Asia/Manila';
+const MANILA_TIME_ZONE = 'Asia/Manila';
 
 /** Sending window: Monday–Saturday, 8:00 AM – 6:00 PM Asia/Manila. */
-export const SENDING_HOURS = { startHour: 8, endHour: 18 } as const;
+const SENDING_HOURS = { startHour: 8, endHour: 18 } as const;
+
+/** Days before the due date at which the first reminder becomes eligible. */
+export const REMINDER_LEAD_DAYS = 3;
+
+/** Days after the due date of the "overdue" reminder. */
+export const REMINDER_OVERDUE_DAYS = 3;
+
+/** Repeat interval for as long as a balance remains. */
+export const REMINDER_FOLLOW_UP_INTERVAL_DAYS = 7;
 
 export interface ManilaClock {
   /** ISO date YYYY-MM-DD in Asia/Manila. */
@@ -79,9 +88,9 @@ export function nextEligibleReminder(
   todayIso: string
 ): { dateIso: string; type: ScheduledReminderType } {
   const fixed: Array<[number, ScheduledReminderType]> = [
-    [-3, 'upcoming'],
+    [-REMINDER_LEAD_DAYS, 'upcoming'],
     [0, 'due_today'],
-    [3, 'overdue'],
+    [REMINDER_OVERDUE_DAYS, 'overdue'],
   ];
   for (const [offset, type] of fixed) {
     const dateIso = addDaysIso(dueDateIso, offset);
@@ -109,11 +118,36 @@ export function determineDueReminder(
 ): ScheduledReminderType | null {
   const daysPastDue = daysBetween(dueDateIso, todayIso);
 
-  if (daysPastDue === -3) return 'upcoming';
+  if (daysPastDue === -REMINDER_LEAD_DAYS) return 'upcoming';
   if (daysPastDue === 0) return 'due_today';
-  if (daysPastDue === 3) return 'overdue';
-  if (daysPastDue > 3 && (daysPastDue - 3) % 7 === 0) return 'follow_up';
+  if (daysPastDue === REMINDER_OVERDUE_DAYS) return 'overdue';
+  if (
+    daysPastDue > REMINDER_OVERDUE_DAYS &&
+    (daysPastDue - REMINDER_OVERDUE_DAYS) % REMINDER_FOLLOW_UP_INTERVAL_DAYS === 0
+  ) {
+    return 'follow_up';
+  }
   return null;
+}
+
+/**
+ * The reminder stage an unpaid invoice is currently in — used to label the
+ * reminder queue.
+ *
+ * This is the single source of truth for the stage boundaries. The reminders
+ * page previously re-derived them with different rules (`<= 7 days` counted as
+ * overdue), so the queue could label an invoice "Overdue" while the scheduler
+ * was already in its weekly follow-up cycle.
+ */
+export function classifyReminderStage(
+  dueDateIso: string,
+  todayIso: string
+): ScheduledReminderType {
+  const daysPastDue = daysBetween(dueDateIso, todayIso);
+  if (daysPastDue < 0) return 'upcoming';
+  if (daysPastDue === 0) return 'due_today';
+  if (daysPastDue <= REMINDER_OVERDUE_DAYS) return 'overdue';
+  return 'follow_up';
 }
 
 /**

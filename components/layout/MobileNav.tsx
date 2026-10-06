@@ -105,6 +105,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ isOpen, onClose }) => {
                 key={item.href}
                 href={item.href}
                 onClick={onClose}
+                aria-current={isActive ? 'page' : undefined}
                 className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-navy text-white shadow-md'

@@ -12,6 +12,18 @@ export function formatPeso(amount: number): string {
   })}`;
 }
 
+/**
+ * Compact Philippine Peso for dense lists and stat cards, e.g. "₱1,250,000".
+ * Use this instead of inlining `toLocaleString('en-PH', …)` at the call site.
+ */
+export function formatPesoCompact(amount: number): string {
+  const value = Number.isFinite(amount) ? amount : 0;
+  return `₱${Math.round(value).toLocaleString('en-PH', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}`;
+}
+
 /** GSM-friendly Philippine Peso for SMS bodies, e.g. "PHP 1,250,000.00". */
 export function formatPesoForSMS(amount: number): string {
   const value = Number.isFinite(amount) ? amount : 0;
@@ -22,15 +34,24 @@ export function formatPesoForSMS(amount: number): string {
 }
 
 /**
+ * Shared ISO-date parsing for every display format. A date-only string is
+ * anchored to Asia/Manila so it never shifts a day in other timezones.
+ */
+export function parseManilaDate(isoDate: string | null | undefined): Date | null {
+  if (!isoDate) return null;
+  const date = new Date(
+    /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? `${isoDate}T00:00:00+08:00` : isoDate
+  );
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
  * Human-readable Philippine date, e.g. "January 15, 2026".
  * Accepts an ISO date string (YYYY-MM-DD) or timestamp.
  */
 export function formatDatePH(isoDate: string | null | undefined): string {
-  if (!isoDate) return '';
-  const date = new Date(
-    /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? `${isoDate}T00:00:00+08:00` : isoDate
-  );
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseManilaDate(isoDate);
+  if (!date) return '';
   return date.toLocaleDateString('en-PH', {
     year: 'numeric',
     month: 'long',

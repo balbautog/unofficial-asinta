@@ -19,6 +19,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { formatPesoCompact } from '@/lib/email/format';
 
 export default function ProjectsPage() {
   const { isFounder, isSupervisor, user } = useAuth();
@@ -59,8 +60,7 @@ export default function ProjectsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatPHP = formatPesoCompact;
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +213,7 @@ export default function ProjectsPage() {
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-ink-secondary">Collected / Invoiced:</span>
-                        <span className="font-semibold text-emerald-800">
+                        <span className="font-semibold text-status-success">
                           {formatPHP(totalCollected)} <span className="text-ink-muted">/ {formatPHP(totalInvoiced)}</span>
                         </span>
                       </div>

@@ -23,7 +23,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { AICategorizationResult } from '@/lib/ai/groq';
+import { formatPeso, formatPesoCompact } from '@/lib/email/format';
 
 export default function ExpensesPage() {
   const { user } = useAuth();
@@ -66,8 +68,25 @@ export default function ExpensesPage() {
   const [receiptFileName, setReceiptFileName] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  // Bale confirmation. A detected advance is NEVER created automatically —
+  // the Founder must name the recipient first.
+  const [balePrompt, setBalePrompt] = useState<{
+    description: string;
+    amount: number;
+    projectId: string;
+    expenseDate: string;
+  } | null>(null);
+  const [baleWorkerId, setBaleWorkerId] = useState('');
+  const [isCreatingAdvance, setIsCreatingAdvance] = useState(false);
+
+  // Non-binding hint only: names that literally appear in the description.
+  // It is never used to pre-select or auto-assign a worker.
+  const mentionedWorkers = balePrompt
+    ? workers.filter((worker) => {
+        const firstName = worker.name.toLowerCase().split(' ')[0];
+        return firstName.length > 2 && balePrompt.description.toLowerCase().includes(firstName);
+      })
+    : [];
 
   const filteredExpenses = expenses.filter((exp) => {
     const proj = projects.find((p) => p.id === exp.project_id);
@@ -117,8 +136,8 @@ export default function ExpensesPage() {
       ...formData,
       category: aiResult.category,
       notes: formData.notes
-        ? `${formData.notes} (AI: ${aiResult.reasoning})`
-        : `AI Note: ${aiResult.reasoning}`,
+        ? `${formData.notes} (Suggestion: ${aiResult.reasoning})`
+        : `Suggestion: ${aiResult.reasoning}`,
     });
     setAiAccepted(true);
   };
@@ -144,28 +163,27 @@ export default function ExpensesPage() {
       notes: formData.notes || null,
       ai_category_suggestion: aiResult?.category || null,
       ai_bale_detection: aiResult?.isBale || false,
-      ai_approval_suggestion: aiResult?.approvalRouting || null,
-      ai_confirmed: true, // Founder explicitly confirmed by submitting
+      // Removed: ai_approval_suggestion. The routing string was decorative —
+      // nothing enforced it — and every expense writer is already a Founder,
+      // so an "approval required" note had no approver to route to.
+      ai_approval_suggestion: null,
+      // True only when a suggestion actually existed and the Founder applied
+      // it. Previously hardcoded `true` on every row, which stored nothing.
+      ai_confirmed: Boolean(aiResult && aiAccepted),
       created_by: user.id,
     });
 
     if (newExp) {
-      // If Bale was detected & confirmed, automatically create a linked Bale entry in Advances ledger
+      // A detected bale is a *proposal*, not a write. The Founder chooses the
+      // recipient in a follow-up dialog; nothing is deducted automatically.
       if (aiResult?.isBale) {
-        // Find worker mentioned in description or default to first worker
-        const lower = formData.description.toLowerCase();
-        const matchedWorker = workers.find((w) => lower.includes(w.name.toLowerCase().split(' ')[0]));
-        const targetWorkerId = matchedWorker ? matchedWorker.id : workers[0]?.id;
-
-        if (targetWorkerId) {
-          await createAdvance({
-            worker_id: targetWorkerId,
-            project_id: formData.project_id,
-            amount: amountNum,
-            reason: formData.description,
-            date: formData.expense_date,
-          });
-        }
+        setBalePrompt({
+          description: formData.description,
+          amount: amountNum,
+          projectId: formData.project_id,
+          expenseDate: formData.expense_date,
+        });
+        setBaleWorkerId('');
       }
 
       setIsAddModalOpen(false);
@@ -183,6 +201,35 @@ export default function ExpensesPage() {
       setReceiptFileName(null);
     }
     setIsSubmitting(false);
+  };
+
+  const handleDismissBalePrompt = () => {
+    setBalePrompt(null);
+    setBaleWorkerId('');
+  };
+
+  const handleConfirmBaleAdvance = async () => {
+    if (!balePrompt || !baleWorkerId) return;
+    setIsCreatingAdvance(true);
+    const created = await createAdvance({
+      worker_id: baleWorkerId,
+      project_id: balePrompt.projectId,
+      amount: balePrompt.amount,
+      reason: balePrompt.description,
+      date: balePrompt.expenseDate,
+    });
+    setIsCreatingAdvance(false);
+
+    if (created) {
+      showToast('success', 'Worker advance recorded in the Bale ledger.');
+    } else {
+      showToast(
+        'error',
+        'The expense was saved, but the worker advance could not be created. Record it from the Advances page.'
+      );
+    }
+
+    handleDismissBalePrompt();
   };
 
   // Upload the receipt photo directly to the Supabase Storage `receipts`
@@ -333,24 +380,26 @@ export default function ExpensesPage() {
                       <div className="text-xs text-ink-muted italic">{exp.notes}</div>
                     )}
 
-                    {/* AI Verification Indicator */}
+                    {/* Entry provenance — states what actually happened. */}
                     <div className="flex items-center space-x-2 pt-1 text-[11px] text-ink-secondary">
-                      <span className="inline-flex items-center space-x-1 text-emerald-800 font-semibold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>Founder Confirmed</span>
-                      </span>
-                      {exp.ai_approval_suggestion && (
-                        <span className="text-ink-muted truncate">
-                          · {exp.ai_approval_suggestion}
+                      <span className="inline-flex items-center space-x-1 text-status-success font-semibold bg-status-success-bg px-2 py-0.5 rounded-md border border-status-success/20">
+                        <CheckCircle2 className="w-3 h-3 text-status-success" />
+                        <span>
+                          {/* Requires a recorded suggestion AND confirmation: `ai_confirmed`
+                              was previously hardcoded true, so on its own it would claim
+                              a suggestion was applied to rows that never had one. */}
+                          {exp.ai_category_suggestion && exp.ai_confirmed
+                            ? 'Suggestion applied'
+                            : 'Entered manually'}
                         </span>
-                      )}
+                      </span>
                     </div>
                   </div>
 
                   {/* Right: Amount & Receipt Preview */}
                   <div className="flex items-center justify-between lg:justify-end space-x-4">
                     <div className="text-left lg:text-right">
-                      <div className="text-base font-extrabold text-navy">{formatPHP(exp.amount)}</div>
+                      <div className="text-base font-extrabold text-navy">{formatPesoCompact(exp.amount)}</div>
                       <div className="text-[11px] text-ink-secondary">Disbursed</div>
                     </div>
 
@@ -372,9 +421,26 @@ export default function ExpensesPage() {
             })}
 
             {filteredExpenses.length === 0 && (
-              <div className="p-12 text-center text-xs text-ink-secondary">
-                No expense records found matching current criteria.
-              </div>
+              <EmptyState
+                title="No expenses to show"
+                description={
+                  expenses.length === 0
+                    ? 'Record your first site disbursement to start the ledger.'
+                    : 'No expense matches the current search or filters.'
+                }
+                action={
+                  expenses.length === 0 ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAddModalOpen(true)}
+                      leftIcon={<Plus className="w-3.5 h-3.5" />}
+                    >
+                      Record Expense
+                    </Button>
+                  ) : undefined
+                }
+              />
             )}
           </div>
         </div>
@@ -384,8 +450,8 @@ export default function ExpensesPage() {
       <Modal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        title="Record Site Expense & AI Categorization"
-        description="Enter expense details. The Groq AI engine will analyze category and bale advance detection."
+        title="Record Site Expense"
+        description="Enter the details. Suggestions may come from the Groq model or the built-in rules — you confirm every field."
         maxWidth="lg"
       >
         <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
@@ -448,14 +514,18 @@ export default function ExpensesPage() {
 
           {/* GROQ AI SUGGESTION BOX */}
           {aiResult && (
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-sky-50/40 border border-sky-200 space-y-3 animate-in fade-in">
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-sky-50/40 border border-status-info/20 space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-navy font-bold text-xs">
                   <Bot className="w-4 h-4 text-navy" />
-                  <span>Groq AI Ledger Suggestions</span>
+                  <span>
+                    {aiResult.source === 'llm'
+                      ? 'Groq AI Ledger Suggestion'
+                      : 'Built-in Rule Suggestion'}
+                  </span>
                 </div>
-                <Badge variant="navy" size="sm">
-                  {Math.round(aiResult.confidence * 100)}% Confidence
+                <Badge variant={aiResult.source === 'llm' ? 'navy' : 'neutral'} size="sm">
+                  {aiResult.source === 'llm' ? 'AI' : 'Rules'}
                 </Badge>
               </div>
 
@@ -466,15 +536,28 @@ export default function ExpensesPage() {
                 </div>
                 <div className="p-2 rounded-xl bg-white border border-slate-200">
                   <span className="text-ink-secondary">Possible Worker Bale:</span>
-                  <div className={`font-bold ${aiResult.isBale ? 'text-amber-800' : 'text-emerald-800'}`}>
+                  <div className={`font-bold ${aiResult.isBale ? 'text-status-warning' : 'text-status-success'}`}>
                     {aiResult.isBale ? 'YES (Advance Detected)' : 'No (Standard Expense)'}
                   </div>
                 </div>
               </div>
 
-              <div className="text-[11px] text-ink-secondary bg-white p-2.5 rounded-xl border border-slate-200">
-                <span className="font-semibold text-navy">Routing: </span>
-                {aiResult.approvalRouting}
+              {/* Evidence replaces the old invented "% confidence" figure. */}
+              <div className="text-[11px] text-ink-secondary bg-white p-2.5 rounded-xl border border-slate-200 space-y-1">
+                <div>
+                  <span className="font-semibold text-navy">Why: </span>
+                  {aiResult.reasoning}
+                </div>
+                {aiResult.evidence.length > 0 ? (
+                  <div className="text-ink-muted">Based on {aiResult.evidence.join(', ')}</div>
+                ) : (
+                  <div className="text-ink-muted">
+                    Nothing matched — please choose the category manually.
+                  </div>
+                )}
+                {aiResult.degradedReason && (
+                  <div className="text-status-warning font-medium">{aiResult.degradedReason}</div>
+                )}
               </div>
 
               {/* Founder Confirmation Actions */}
@@ -494,8 +577,8 @@ export default function ExpensesPage() {
                     Accept AI Suggestions
                   </Button>
                 ) : (
-                  <span className="text-emerald-800 font-bold text-xs flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-status-success font-bold text-xs flex items-center gap-1">
+                    <CheckCircle2 className="w-4 h-4 text-status-success" />
                     Suggestions Applied
                   </span>
                 )}
@@ -543,8 +626,8 @@ export default function ExpensesPage() {
                 />
               </label>
               {formData.receipt_url && (
-                <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <div className="min-w-0 flex items-center gap-2 text-emerald-800">
+                <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-status-success/20 bg-status-success-bg px-3 py-2">
+                  <div className="min-w-0 flex items-center gap-2 text-status-success">
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
                     <span className="truncate text-[11px] font-semibold">
                       Receipt Attached ✓{receiptFileName ? ` — ${receiptFileName}` : ''}
@@ -553,7 +636,7 @@ export default function ExpensesPage() {
                   <button
                     type="button"
                     onClick={handleRemoveReceipt}
-                    className="shrink-0 text-[11px] font-bold text-rose-700 hover:underline"
+                    className="shrink-0 text-[11px] font-bold text-status-danger hover:underline"
                   >
                     Remove
                   </button>
@@ -600,6 +683,73 @@ export default function ExpensesPage() {
             <div className="flex justify-end">
               <Button variant="primary" size="sm" onClick={() => setSelectedReceiptUrl(null)}>
                 Close Preview
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* BALE RECIPIENT CONFIRMATION — nothing is deducted without an explicit choice */}
+      <Modal
+        isOpen={Boolean(balePrompt)}
+        onClose={handleDismissBalePrompt}
+        title="Worker advance detected"
+        description="This expense looks like a cash advance (bale). Choose who received it — nothing is deducted automatically."
+        maxWidth="md"
+      >
+        {balePrompt && (
+          <div className="space-y-4 text-xs">
+            <div className="p-3 rounded-xl bg-surface-inset border border-surface-border space-y-1">
+              <div className="font-semibold text-navy">{balePrompt.description}</div>
+              <div className="text-ink-secondary">
+                {formatPeso(balePrompt.amount)} · {balePrompt.expenseDate}
+              </div>
+            </div>
+
+            <Select
+              label="Advance recipient"
+              value={baleWorkerId}
+              onChange={(event) => setBaleWorkerId(event.target.value)}
+              hint="The advance is deducted from this worker's next payroll cycle."
+            >
+              <option value="">Select the worker who received this advance…</option>
+              {workers
+                .filter((worker) => worker.active)
+                .map((worker) => (
+                  <option key={worker.id} value={worker.id}>
+                    {worker.name} — {worker.position}
+                  </option>
+                ))}
+            </Select>
+
+            {mentionedWorkers.length > 0 && (
+              <p className="text-[11px] text-ink-secondary">
+                Mentioned in the description (not selected automatically):{' '}
+                <span className="font-semibold text-navy">
+                  {mentionedWorkers.map((worker) => worker.name).join(', ')}
+                </span>
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleDismissBalePrompt}
+                disabled={isCreatingAdvance}
+              >
+                Not a worker advance
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleConfirmBaleAdvance}
+                disabled={!baleWorkerId}
+                isLoading={isCreatingAdvance}
+              >
+                Record advance in Bale ledger
               </Button>
             </div>
           </div>

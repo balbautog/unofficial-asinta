@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { useToast } from '@/components/ui/Toast';
 
 export default function AttendancePage() {
@@ -305,19 +306,19 @@ export default function AttendancePage() {
           <form onSubmit={handleBatchSubmit} className="space-y-6">
             {/* Live Count Summary */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-900 text-center">
+              <div className="p-3 rounded-2xl bg-status-success-bg/70 border border-status-success/20 text-status-success text-center">
                 <div className="text-xl font-bold">{presentCount}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wider">Present Full Day</div>
               </div>
-              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-amber-900 text-center">
+              <div className="p-3 rounded-2xl bg-status-warning-bg/70 border border-status-warning/20 text-status-warning text-center">
                 <div className="text-xl font-bold">{halfDayCount}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wider">Half Day (4h)</div>
               </div>
-              <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-200/80 text-rose-900 text-center">
+              <div className="p-3 rounded-2xl bg-status-danger-bg/70 border border-status-danger/20 text-status-danger text-center">
                 <div className="text-xl font-bold">{absentCount}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wider">Absent</div>
               </div>
-              <div className="p-3 rounded-2xl bg-sky-50/70 border border-sky-200/80 text-sky-900 text-center">
+              <div className="p-3 rounded-2xl bg-status-info-bg/70 border border-status-info/20 text-status-info text-center">
                 <div className="text-xl font-bold">{leaveCount}</div>
                 <div className="text-[11px] font-semibold uppercase tracking-wider">Approved Leave</div>
               </div>
@@ -335,8 +336,8 @@ export default function AttendancePage() {
 
             {/* Submission Banner */}
             {submissionSuccess && (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold flex items-center space-x-2 animate-in fade-in">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <div className="p-4 rounded-2xl bg-status-success-bg border border-status-success/20 text-status-success text-sm font-semibold flex items-center space-x-2 animate-in fade-in">
+                <CheckCircle2 className="w-5 h-5 text-status-success" />
                 <span>Attendance records successfully saved and synchronized with BALE ledger!</span>
               </div>
             )}
@@ -385,10 +386,10 @@ export default function AttendancePage() {
                     {/* LARGE TOUCH-TOGGLE STATUS BUTTONS */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {[
-                        { id: 'present', label: 'Present (8h)', color: 'bg-emerald-600', activeBg: 'bg-emerald-50 border-emerald-500 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20' },
-                        { id: 'half_day', label: 'Half Day (4h)', color: 'bg-amber-600', activeBg: 'bg-amber-50 border-amber-500 text-amber-900 shadow-sm ring-2 ring-amber-500/20' },
-                        { id: 'absent', label: 'Absent (0h)', color: 'bg-rose-600', activeBg: 'bg-rose-50 border-rose-500 text-rose-900 shadow-sm ring-2 ring-rose-500/20' },
-                        { id: 'leave', label: 'Leave (0h)', color: 'bg-sky-600', activeBg: 'bg-sky-50 border-sky-500 text-sky-900 shadow-sm ring-2 ring-sky-500/20' },
+                        { id: 'present', label: 'Present (8h)', color: 'bg-status-success', activeBg: 'bg-status-success-bg border-status-success text-status-success shadow-sm ring-2 ring-status-success/20' },
+                        { id: 'half_day', label: 'Half Day (4h)', color: 'bg-status-warning', activeBg: 'bg-status-warning-bg border-status-warning text-status-warning shadow-sm ring-2 ring-status-warning/20' },
+                        { id: 'absent', label: 'Absent (0h)', color: 'bg-status-danger', activeBg: 'bg-status-danger-bg border-status-danger text-status-danger shadow-sm ring-2 ring-status-danger/20' },
+                        { id: 'leave', label: 'Leave (0h)', color: 'bg-status-info', activeBg: 'bg-status-info-bg border-status-info text-status-info shadow-sm ring-2 ring-status-info/20' },
                       ].map((item) => {
                         const isSelected = currentDraft.status === item.id;
                         return (
@@ -425,6 +426,19 @@ export default function AttendancePage() {
                   </div>
                 );
               })}
+
+              {filteredWorkers.length === 0 && (
+                <div className="bg-white rounded-3xl border border-surface-border">
+                  <EmptyState
+                    title="No workers on this site"
+                    description={
+                      workers.length === 0
+                        ? 'Register workers first — they will appear here for daily attendance.'
+                        : 'No worker matches the current filter.'
+                    }
+                  />
+                </div>
+              )}
             </div>
 
             {/* Bottom Submit Sticky Bar */}
@@ -522,6 +536,13 @@ export default function AttendancePage() {
                     </div>
                   );
                 })}
+
+                {attendance.length === 0 && (
+                  <EmptyState
+                    title="No attendance records yet"
+                    description="Submitted site attendance will appear here with its full audit trail."
+                  />
+                )}
               </div>
             </div>
           </div>

@@ -184,7 +184,7 @@ export const TemplateEditorCard: React.FC = () => {
         {!data && !error && <div className="text-ink-secondary p-2">Loading template…</div>}
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-status-danger flex items-center space-x-2">
+          <div className="p-3 rounded-xl bg-status-danger-bg border border-status-danger/20 text-status-danger flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
@@ -215,7 +215,7 @@ export const TemplateEditorCard: React.FC = () => {
             </div>
 
             {warnings.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+              <div className="p-3 rounded-xl bg-status-warning-bg border border-status-warning/20 text-status-warning">
                 Warning: important billing placeholders missing from the template:{' '}
                 <span className="font-mono font-semibold">{warnings.join(', ')}</span>
               </div>

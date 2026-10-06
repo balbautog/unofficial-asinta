@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient, isServiceRoleConfigured } from '@/lib/supabase/admin';
-import { sendPhilSMS } from '@/lib/sms/philsms';
+import { deliverAndLogSMS } from '@/lib/sms/deliver';
 import { normalizePhilippineMobile } from '@/lib/sms/phone';
 import { buildReminderSMS } from '@/lib/sms/templates';
 import {
@@ -201,48 +201,36 @@ async function runReminderCron(req: NextRequest) {
       });
 
       const recipientName = (client?.contact_person || '').trim() || client?.name || 'Client';
-      const smsResult = await sendPhilSMS({
+
+      // Shared delivery + honest logging (see lib/sms/deliver.ts). The
+      // reminder_dispatches transition stays here because it is specific to
+      // the scheduled-reminder pipeline.
+      const outcome = await deliverAndLogSMS({
+        db,
+        invoiceId: invoice.id,
         recipient: recipientName,
         phone: normalizedPhone as string,
         message,
       });
 
       const nowIso = new Date().toISOString();
-      if (smsResult.success && !smsResult.simulated) {
+      if (outcome.success) {
         await db
           .from('reminder_dispatches')
-          .update({ status: 'sent', provider_message_id: smsResult.messageId || null, sent_at: nowIso })
+          .update({
+            status: 'sent',
+            provider_message_id: outcome.providerMessageId,
+            sent_at: nowIso,
+          })
           .eq('id', dispatchId);
-        await db.from('sms_logs').insert({
-          invoice_id: invoice.id,
-          recipient: recipientName,
-          phone: normalizedPhone,
-          message,
-          status: 'sent',
-          simulated: false,
-          provider_status: 'sent',
-          provider_message_id: smsResult.messageId || null,
-        });
         record.outcome = 'sent';
         sent += 1;
       } else {
-        const errorMessage = smsResult.simulated
-          ? 'PhilSMS entered simulation mode mid-run'
-          : smsResult.error || 'Unknown gateway failure';
+        const errorMessage = outcome.error || 'Unknown gateway failure';
         await db
           .from('reminder_dispatches')
           .update({ status: 'failed', error_message: errorMessage })
           .eq('id', dispatchId);
-        await db.from('sms_logs').insert({
-          invoice_id: invoice.id,
-          recipient: recipientName,
-          phone: normalizedPhone,
-          message,
-          status: 'failed',
-          simulated: Boolean(smsResult.simulated),
-          provider_status: 'failed',
-          error_message: errorMessage,
-        });
         record.outcome = 'failed';
         record.reason = errorMessage;
         failed += 1;

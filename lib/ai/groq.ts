@@ -1,163 +1,256 @@
-import { ExpenseCategory } from '@/types';
+import {
+  EXPENSE_CATEGORIES,
+  isExpenseCategory,
+  UNCLASSIFIED_EXPENSE_CATEGORY,
+  type ExpenseCategory,
+} from '@/lib/ai/categories';
+
+/**
+ * Expense categorization: API-assisted, rule-based decision support.
+ *
+ * Design rule (deliberate, please keep it):
+ *   - The LLM may only *extract* — map a free-text description onto a category.
+ *   - Every *decision* stays in inspectable code (the rule layer below).
+ *   - Nothing here writes to the ledger; a Founder confirms every suggestion.
+ *
+ * The result is always usable. When the model is missing, unreachable, or
+ * returns something unusable, this falls back to the deterministic rule layer
+ * and reports WHY in `degradedReason` — degradation is visible, never silent.
+ */
+
+export const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+
+export type CategorizationSource = 'llm' | 'rules';
 
 export interface AICategorizationResult {
   category: ExpenseCategory;
   isBale: boolean;
-  approvalRouting: string;
-  confidence: number;
+  reasoning: string;
+  /**
+   * Why the suggestion was made — matched keywords, or the model that classified
+   * it. Replaces the previously invented numeric "confidence", which asserted a
+   * precision that was never measured.
+   */
+  evidence: string[];
+  source: CategorizationSource;
+  /** Set when an LLM was configured but could not be used. Safe to show to Founders. */
+  degradedReason?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Layer 1 + 3: deterministic rules (always available, never calls the network) */
+/* -------------------------------------------------------------------------- */
+
+const BALE_KEYWORDS = [
+  'bale',
+  'cash advance',
+  'advance',
+  'emergency cash',
+  'ayuda',
+  'pamasahe',
+];
+
+interface CategoryRule {
+  category: ExpenseCategory;
+  keywords: string[];
   reasoning: string;
 }
 
-export async function analyzeExpenseWithAI(
-  description: string,
-  amount: number
-): Promise<AICategorizationResult> {
-  const groqApiKey = process.env.GROQ_API_KEY;
+const CATEGORY_RULES: CategoryRule[] = [
+  {
+    category: 'materials',
+    keywords: [
+      'cement',
+      'steel',
+      'rebar',
+      'gravel',
+      'sand',
+      'lumber',
+      'plywood',
+      'paint',
+      'tile',
+      'pipe',
+      'concrete',
+      'wire',
+      'hollow block',
+      'chb',
+      'hardware',
+      'supplies',
+    ],
+    reasoning: 'Construction raw materials and architectural finishes.',
+  },
+  {
+    category: 'labor',
+    keywords: ['payroll', 'sweldo', 'labor', 'carpenter', 'mason', 'electrician', 'wages'],
+    reasoning: 'Site manpower compensation and direct craft labor.',
+  },
+  {
+    category: 'equipment',
+    keywords: [
+      'crane',
+      'mixer',
+      'scaffolding',
+      'drill',
+      'backhoe',
+      'rental',
+      'generator',
+      'grinder',
+    ],
+    reasoning: 'Machinery rental, heavy tools, and site plant equipment.',
+  },
+  {
+    category: 'permits',
+    keywords: ['permit', 'lgu', 'clearance', 'barangay', 'city hall', 'bir', 'occupancy'],
+    reasoning: 'Statutory municipal permits, zoning, and regulatory filings.',
+  },
+  {
+    category: 'transportation',
+    keywords: ['gas', 'diesel', 'fuel', 'toll', 'trucking', 'delivery', 'fare', 'hauling'],
+    reasoning: 'Site logistics, fuel, tollway corridors, and material freight.',
+  },
+];
 
-  if (groqApiKey) {
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${groqApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [
-            {
-              role: 'system',
-              content: `You are the AI ledger assistant for Asinta Architects, an architecture & design-build firm in Batangas, Philippines.
-Analyze the expense description and amount (in Philippine Pesos PHP ₱).
-Determine:
-1. Category: exactly one of: "materials", "labor", "equipment", "permits", "transportation", "other".
-2. isBale: boolean (true if this represents a cash advance or "bale" to a worker or sub-contractor for personal/family/advance salary).
-3. approvalRouting: brief recommendation (e.g. "Auto-verified under threshold", "Founder approval required for amount > ₱10,000", "Flagged for Bale Ledger deduction").
-4. confidence: number between 0.5 and 1.0.
-5. reasoning: 1 concise sentence in architectural/construction context.
+const quoteMatches = (keywords: string[]): string[] => keywords.map((word) => `matched "${word}"`);
 
-Respond ONLY in valid JSON matching this schema:
-{"category": "materials"|"labor"|"equipment"|"permits"|"transportation"|"other", "isBale": boolean, "approvalRouting": string, "confidence": number, "reasoning": string}`,
-            },
-            {
-              role: 'user',
-              content: `Expense Description: "${description}"\nAmount: ₱${amount.toLocaleString()}`,
-            },
-          ],
-          temperature: 0.1,
-          response_format: { type: 'json_object' },
-        }),
-      });
+/**
+ * The rule layer. Used on its own when no API key is configured, and as the
+ * fallback whenever the model call cannot produce a usable answer.
+ */
+export function categorizeWithRules(description: string): AICategorizationResult {
+  const lower = (description || '').toLowerCase();
 
-      if (response.ok) {
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content;
-        if (content) {
-          const parsed = JSON.parse(content);
-          return {
-            category: parsed.category || 'materials',
-            isBale: Boolean(parsed.isBale),
-            approvalRouting: parsed.approvalRouting || (amount > 10000 ? 'Founder approval required' : 'Verified standard'),
-            confidence: parsed.confidence || 0.95,
-            reasoning: parsed.reasoning || 'Categorized using architectural semantic analysis.',
-          };
-        }
-      }
-    } catch (e) {
-      console.warn('Groq API direct call error, falling back to local heuristic analyzer:', e);
+  const baleMatches = BALE_KEYWORDS.filter((keyword) => lower.includes(keyword));
+  if (baleMatches.length > 0) {
+    return {
+      category: 'labor',
+      isBale: true,
+      reasoning:
+        'Worker wage advance (bale) detected — deductible from the next payroll cycle.',
+      evidence: quoteMatches(baleMatches),
+      source: 'rules',
+    };
+  }
+
+  for (const rule of CATEGORY_RULES) {
+    const matched = rule.keywords.filter((keyword) => lower.includes(keyword));
+    if (matched.length > 0) {
+      return {
+        category: rule.category,
+        isBale: false,
+        reasoning: rule.reasoning,
+        evidence: quoteMatches(matched),
+        source: 'rules',
+      };
     }
   }
 
-  // Robust built-in architectural & construction heuristic analyzer (works offline & fallback)
-  const lower = description.toLowerCase();
-  let category: ExpenseCategory = 'materials';
-  let isBale = false;
-  let approvalRouting = amount > 15000 ? 'Founder approval required (> ₱15,000)' : 'Standard operating disbursement';
-  let reasoning = 'Matched architectural ledger rules.';
+  return {
+    category: UNCLASSIFIED_EXPENSE_CATEGORY,
+    isBale: false,
+    reasoning: 'No built-in rule matched this description — please choose the category manually.',
+    evidence: [],
+    source: 'rules',
+  };
+}
 
-  if (
-    lower.includes('bale') ||
-    lower.includes('advance') ||
-    lower.includes('cash advance') ||
-    lower.includes('emergency cash') ||
-    lower.includes('ayuda') ||
-    lower.includes('pamasahe advance')
-  ) {
-    category = 'labor';
-    isBale = true;
-    approvalRouting = 'Worker Advance (Bale) detected. Flag for Payroll Ledger deduction.';
-    reasoning = 'Identified worker wage advance keywords. Deductible from upcoming payroll cycle.';
-  } else if (
-    lower.includes('cement') ||
-    lower.includes('steel') ||
-    lower.includes('rebar') ||
-    lower.includes('gravel') ||
-    lower.includes('sand') ||
-    lower.includes('lumber') ||
-    lower.includes('plywood') ||
-    lower.includes('paint') ||
-    lower.includes('tile') ||
-    lower.includes('pipe') ||
-    lower.includes('concrete') ||
-    lower.includes('wire') ||
-    lower.includes('hollow block') ||
-    lower.includes('chb')
-  ) {
-    category = 'materials';
-    reasoning = 'Classified as construction raw materials and architectural finishes.';
-    approvalRouting = amount > 25000 ? 'Executive Founder sign-off needed (> ₱25k PO)' : 'Supplier PO verified';
-  } else if (
-    lower.includes('payroll') ||
-    lower.includes('sweldo') ||
-    lower.includes('labor') ||
-    lower.includes('carpenter') ||
-    lower.includes('mason') ||
-    lower.includes('electrician') ||
-    lower.includes('wages')
-  ) {
-    category = 'labor';
-    reasoning = 'Site manpower compensation and direct craft labor.';
-  } else if (
-    lower.includes('crane') ||
-    lower.includes('mixer') ||
-    lower.includes('scaffolding') ||
-    lower.includes('drill') ||
-    lower.includes('backhoe') ||
-    lower.includes('rental') ||
-    lower.includes('generator') ||
-    lower.includes('grinder')
-  ) {
-    category = 'equipment';
-    reasoning = 'Machinery rental, heavy tools, and site plant equipment.';
-  } else if (
-    lower.includes('permit') ||
-    lower.includes('lgu') ||
-    lower.includes('clearance') ||
-    lower.includes('barangay') ||
-    lower.includes('city hall') ||
-    lower.includes('bir') ||
-    lower.includes('occupancy')
-  ) {
-    category = 'permits';
-    reasoning = 'Statutory municipal permits, zoning, and regulatory filings.';
-  } else if (
-    lower.includes('gas') ||
-    lower.includes('diesel') ||
-    lower.includes('fuel') ||
-    lower.includes('toll') ||
-    lower.includes('trucking') ||
-    lower.includes('delivery') ||
-    lower.includes('fare')
-  ) {
-    category = 'transportation';
-    reasoning = 'Site logistics, fuel, tollway corridor, and material freight.';
+/* -------------------------------------------------------------------------- */
+/* Layer 2: LLM extraction (only when configured)                              */
+/* -------------------------------------------------------------------------- */
+
+function buildSystemPrompt(): string {
+  const enumList = EXPENSE_CATEGORIES.map((category) => `"${category}"`).join(', ');
+  return `You are the ledger assistant for Asinta Architects, an architecture and design-build firm in Batangas, Philippines.
+Classify the expense description into exactly one category from this list: ${enumList}.
+Set isBale to true only when the expense is a cash advance ("bale") to a worker or sub-contractor.
+Write one concise sentence of reasoning in a construction context.
+Respond ONLY with valid JSON in this exact shape:
+{"category": "<one of the listed categories>", "isBale": <true or false>, "reasoning": "<one sentence>"}`;
+}
+
+function withDegradation(
+  fallback: AICategorizationResult,
+  degradedReason: string
+): AICategorizationResult {
+  return { ...fallback, degradedReason };
+}
+
+/**
+ * Suggests a category for an expense description.
+ *
+ * Never throws and never returns an invalid category — the caller can always
+ * render the result. Check `source` / `degradedReason` to tell the Founder
+ * whether the built-in rules or the model produced the suggestion.
+ */
+export async function analyzeExpenseWithAI(description: string): Promise<AICategorizationResult> {
+  const rules = categorizeWithRules(description);
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    return withDegradation(rules, 'GROQ_API_KEY is not configured — using built-in rules.');
   }
 
-  return {
-    category,
-    isBale,
-    approvalRouting,
-    confidence: isBale ? 0.98 : 0.92,
-    reasoning,
-  };
+  try {
+    const response = await fetch(GROQ_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: `Expense description: "${description}"` },
+        ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`Groq categorization unavailable (HTTP ${response.status}); using built-in rules.`);
+      return withDegradation(rules, `Groq returned HTTP ${response.status} — using built-in rules.`);
+    }
+
+    const data = await response.json().catch(() => null);
+    const content = data?.choices?.[0]?.message?.content;
+
+    if (typeof content !== 'string' || !content.trim()) {
+      return withDegradation(rules, 'Groq returned an empty response — using built-in rules.');
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return withDegradation(rules, 'Groq returned a response that could not be parsed.');
+    }
+
+    // Validate before the suggestion can reach the database: an out-of-enum
+    // category would otherwise fail the CHECK constraint mid-write.
+    if (!isExpenseCategory(parsed?.category)) {
+      return withDegradation(
+        rules,
+        `Groq returned an unsupported category (${String(parsed?.category)}) — using built-in rules.`
+      );
+    }
+
+    const reasoning =
+      typeof parsed?.reasoning === 'string' && parsed.reasoning.trim()
+        ? parsed.reasoning.trim()
+        : 'Classified by the Groq model.';
+
+    return {
+      category: parsed.category,
+      isBale: Boolean(parsed?.isBale),
+      reasoning,
+      evidence: [`Classified by ${GROQ_MODEL}`],
+      source: 'llm',
+    };
+  } catch (error) {
+    console.warn('Groq API request failed; using built-in rules.', error);
+    return withDegradation(rules, 'The Groq request failed — using built-in rules.');
+  }
 }

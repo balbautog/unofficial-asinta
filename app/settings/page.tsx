@@ -12,6 +12,7 @@ import { TemplateEditorCard } from '@/components/email/TemplateEditorCard';
 import { TestEmailCard } from '@/components/email/TestEmailCard';
 
 interface IntegrationStatus {
+  groqModel?: string;
   groqConfigured: boolean;
   philsmsConfigured: boolean;
   philsmsSenderId?: string;
@@ -211,10 +212,18 @@ export default function SettingsPage() {
                     </Badge>
                   </div>
                   <div className="text-ink-secondary">
-                    Model: <span className="font-mono text-navy font-semibold">llama-3.3-70b-versatile</span>
+                    Model:{' '}
+                    <span className="font-mono text-navy font-semibold">
+                      {integrationStatus?.groqModel || '—'}
+                    </span>
                   </div>
                   <div className="text-[11px] text-ink-muted">
-                    Auto-categorizes expenses and detects worker bale advances.
+                    Suggests an expense category and flags possible worker bale advances. Every
+                    suggestion is confirmed by a Founder before it reaches the ledger.
+                  </div>
+                  <div className="text-[11px] text-ink-muted">
+                    Without a key, expense entry still works — the built-in rule categorizer is used
+                    and labelled as such.
                   </div>
                 </div>
 
@@ -257,7 +266,7 @@ export default function SettingsPage() {
                     </div>
                     <p className="text-[11px] text-ink-muted">This sends a billable message. Use a number you control. Gateway acceptance is not the same as delivery.</p>
                     {smsTestResult && (
-                      <div role="status" className={`rounded-lg border p-3 text-[11px] ${smsTestResult.accepted ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-200 bg-rose-50 text-rose-800'}`}>
+                      <div role="status" className={`rounded-lg border p-3 text-[11px] ${smsTestResult.accepted ? 'border-status-success/20 bg-status-success-bg text-status-success' : 'border-status-danger/20 bg-status-danger-bg text-status-danger'}`}>
                         <strong>{smsTestResult.accepted ? 'PhilSMS API accepted the test' : 'Test not confirmed'}</strong>
                         {smsTestResult.error && <div className="mt-1">{smsTestResult.error}</div>}
                         {smsTestResult.providerMessageId && <div className="mt-1">Provider message ID: <span className="font-mono">{smsTestResult.providerMessageId}</span></div>}

@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { formatPesoCompact } from '@/lib/email/format';
 
 export default function PayrollPage() {
   const {
@@ -37,8 +38,7 @@ export default function PayrollPage() {
   const [periodStart, setPeriodStart] = useState('2026-09-08');
   const [periodEnd, setPeriodEnd] = useState('2026-09-14');
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatPHP = formatPesoCompact;
 
   const filteredPayroll = payroll.filter((p) => {
     const worker = workers.find((w) => w.id === p.worker_id);
@@ -100,16 +100,16 @@ export default function PayrollPage() {
 
           <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
             <div className="text-xs font-semibold text-ink-secondary uppercase">Bale Deductions Recovered</div>
-            <div className="text-2xl font-bold text-emerald-800 mt-1">{formatPHP(totalBaleRecovered)}</div>
-            <div className="text-[11px] text-emerald-700 mt-0.5">Subtracted from worker advances</div>
+            <div className="text-2xl font-bold text-status-success mt-1">{formatPHP(totalBaleRecovered)}</div>
+            <div className="text-[11px] text-status-success mt-0.5">Subtracted from worker advances</div>
           </div>
 
           <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
             <div className="text-xs font-semibold text-ink-secondary uppercase">Pending Founder Approval</div>
-            <div className="text-2xl font-bold text-amber-800 mt-1">
+            <div className="text-2xl font-bold text-status-warning mt-1">
               {payroll.filter((p) => p.status === 'draft' || p.status === 'reviewed').length}
             </div>
-            <div className="text-[11px] text-amber-700 mt-0.5">Draft payroll vouchers</div>
+            <div className="text-[11px] text-status-warning mt-0.5">Draft payroll vouchers</div>
           </div>
         </div>
 
@@ -334,7 +334,7 @@ export default function PayrollPage() {
                 </div>
 
                 {/* Breakdown Table */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <div className="border border-slate-200 rounded-xl overflow-x-auto text-xs">
                   <table className="w-full">
                     <thead className="bg-slate-50 font-bold text-navy uppercase text-[10px] border-b border-slate-200">
                       <tr>

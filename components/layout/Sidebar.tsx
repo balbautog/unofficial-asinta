@@ -66,7 +66,7 @@ export const Sidebar: React.FC = () => {
       <div className="p-3.5 rounded-2xl bg-surface-inset/70 border border-surface-border shadow-[inset_1px_1px_3px_rgba(11,31,58,0.05)]">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 rounded-lg bg-white border border-surface-border text-navy shadow-sm">
-            {isFounder ? <Compass className="w-4 h-4 text-navy" /> : <Shield className="w-4 h-4 text-amber-700" />}
+            {isFounder ? <Compass className="w-4 h-4 text-navy" /> : <Shield className="w-4 h-4 text-status-warning" />}
           </div>
           <div className="truncate">
             <div className="text-[11px] font-bold uppercase tracking-wider text-ink-secondary">
@@ -93,6 +93,7 @@ export const Sidebar: React.FC = () => {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
                   isActive
                     ? 'bg-navy text-white shadow-[0_3px_10px_rgba(11,31,58,0.22)]'
@@ -126,8 +127,8 @@ export const Sidebar: React.FC = () => {
       <div className="mt-auto pt-6 border-t border-surface-border/60 text-[11px] text-ink-muted px-2 space-y-1">
         <div className="font-semibold text-navy">Asinta Architects</div>
         <div>Batangas Studio · v1.0.0</div>
-        <div className="text-[10px] text-emerald-700 flex items-center gap-1 mt-1 font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <div className="text-[10px] text-status-success flex items-center gap-1 mt-1 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
           <span>Postgres RLS Enforced</span>
         </div>
       </div>

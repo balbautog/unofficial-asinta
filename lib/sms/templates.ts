@@ -6,7 +6,7 @@
  * Plain text only: no Markdown, no unicode currency symbols (GSM-7 safe).
  */
 
-import { formatPesoForSMS } from '@/lib/email/format';
+import { formatPesoForSMS, parseManilaDate } from '@/lib/email/format';
 import { resolveClientGreetingName } from '@/lib/email/templates';
 
 export type ReminderType = 'upcoming' | 'due_today' | 'overdue' | 'follow_up';
@@ -29,13 +29,10 @@ export interface ReminderSMSData {
   paymentRequestSentDate?: string | null;
 }
 
-/** GSM-safe date, e.g. "15 Jan 2026". */
+/** GSM-safe date, e.g. "15 Jan 2026". Shares the ISO parsing with formatDatePH. */
 export function formatDateForSMS(isoDate: string | null | undefined): string {
-  if (!isoDate) return '';
-  const date = new Date(
-    /^\d{4}-\d{2}-\d{2}$/.test(isoDate) ? `${isoDate}T00:00:00+08:00` : isoDate
-  );
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseManilaDate(isoDate);
+  if (!date) return '';
   return date.toLocaleDateString('en-PH', {
     day: 'numeric',
     month: 'short',

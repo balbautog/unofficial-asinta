@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useId } from 'react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -13,12 +13,20 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, hint, options, children, id, ...props }, ref) => {
-    const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const generatedId = useId();
+    const selectId = id || generatedId;
+    const errorId = `${selectId}-error`;
+    const hintId = `${selectId}-hint`;
+    const describedBy =
+      [error ? errorId : null, !error && hint ? hintId : null].filter(Boolean).join(' ') || undefined;
 
     return (
       <div className="w-full flex flex-col space-y-1.5">
         {label && (
-          <label htmlFor={selectId} className="text-xs font-semibold text-navy uppercase tracking-wider">
+          <label
+            htmlFor={selectId}
+            className="text-xs font-semibold text-navy uppercase tracking-wider"
+          >
             {label}
           </label>
         )}
@@ -26,12 +34,14 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           <select
             id={selectId}
             ref={ref}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
             className={twMerge(
               clsx(
                 'w-full bg-surface-inset/60 text-ink-primary text-sm rounded-xl border border-surface-border py-2.5 px-3.5 pr-8 appearance-none transition-all duration-150',
                 'shadow-[inset_2px_2px_4px_rgba(11,31,58,0.05),inset_-2px_-2px_4px_rgba(255,255,255,0.9)]',
                 'focus:bg-white focus:border-navy focus:ring-2 focus:ring-navy/15 focus:outline-none cursor-pointer',
-                error && 'border-status-danger ring-1 ring-status-danger/30 bg-red-50/20',
+                error && 'border-status-danger ring-1 ring-status-danger/30 bg-status-danger-bg/40',
                 className
               )
             )}
@@ -51,8 +61,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
             </svg>
           </div>
         </div>
-        {error && <p className="text-xs font-medium text-status-danger">{error}</p>}
-        {hint && !error && <p className="text-xs text-ink-secondary">{hint}</p>}
+        {error && (
+          <p id={errorId} className="text-xs font-medium text-status-danger">
+            {error}
+          </p>
+        )}
+        {hint && !error && (
+          <p id={hintId} className="text-xs text-ink-secondary">
+            {hint}
+          </p>
+        )}
       </div>
     );
   }

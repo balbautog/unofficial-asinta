@@ -100,14 +100,14 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-status-danger text-xs flex items-center space-x-2">
+            <div className="mt-4 p-3 rounded-xl bg-status-danger-bg border border-status-danger/20 text-status-danger text-xs flex items-center space-x-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {redirectNotice && (
-            <div className="mt-4 p-3 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs flex items-center space-x-2">
+            <div className="mt-4 p-3 rounded-xl bg-status-info-bg border border-status-info/20 text-status-info text-xs flex items-center space-x-2">
               <ShieldCheck className="w-4 h-4 shrink-0" />
               <span>{redirectNotice}</span>
             </div>

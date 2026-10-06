@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export default function ToolsPage() {
   const { tools, projects, createTool, updateTool, deleteTool } = useDataStore();
@@ -24,6 +26,7 @@ export default function ToolsPage() {
   const [conditionFilter, setConditionFilter] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null);
 
   const [formData, setFormData] = useState({
@@ -76,9 +79,14 @@ export default function ToolsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Remove tool ${name}?`)) {
-      await deleteTool(id);
-    }
+    setPendingDelete({ id, name });
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setPendingDelete(null);
+    await deleteTool(target.id);
   };
 
   return (
@@ -184,7 +192,7 @@ export default function ToolsPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(tool.id, tool.name)}
-                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50"
+                        className="p-1.5 rounded-lg text-status-danger hover:bg-status-danger-bg"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -218,6 +226,31 @@ export default function ToolsPage() {
               </div>
             );
           })}
+
+          {filteredTools.length === 0 && (
+            <div className="md:col-span-2 lg:col-span-3 bg-white rounded-3xl border border-surface-border">
+              <EmptyState
+                title="No equipment to show"
+                description={
+                  tools.length === 0
+                    ? 'Register site tools and machinery to track their location and condition.'
+                    : 'No equipment matches the current search or filters.'
+                }
+                action={
+                  tools.length === 0 ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAddModalOpen(true)}
+                      leftIcon={<Plus className="w-3.5 h-3.5" />}
+                    >
+                      Register Tool
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -292,6 +325,16 @@ export default function ToolsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(pendingDelete)}
+        title="Remove equipment"
+        message={pendingDelete ? `Remove ${pendingDelete.name}? This cannot be undone.` : ''}
+        confirmLabel="Remove tool"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </AppShell>
   );
 }
