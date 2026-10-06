@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'libpg-query';
@@ -136,6 +137,23 @@ function unscopedPolicies(policies: CreatePolicyNode[]): CreatePolicyNode[] {
  */
 function dropTarget(drop: DropStmtNode): string | undefined {
   return drop.objects?.[0]?.List?.items?.[1]?.String?.sval;
+}
+
+/**
+ * The source-file digests a bundle records in its header, as written by
+ * scripts/build-apply-sql.mjs: `--   <name>  <first 16 hex chars>…`
+ */
+function bundleSources(bundle: string): Array<{ name: string; digest: string }> {
+  return [...bundle.matchAll(/^--\s+(\S+\.sql)\s+([0-9a-f]{16})…$/gm)].map((match) => ({
+    name: match[1],
+    digest: match[2],
+  }));
+}
+
+/** Must match how scripts/build-apply-sql.mjs hashes each source file. */
+function sourceDigest(name: string): string {
+  const sql = readMigration(name).trimEnd();
+  return createHash('sha256').update(sql).digest('hex').slice(0, 16);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,7 +303,10 @@ describe('audit_log stays append-only', () => {
 
 describe('the generated bundles are valid SQL too', () => {
   // The bundles are what the founder actually pastes into the SQL editor, so
-  // they get the same guarantee as their sources.
+  // they get the same guarantee as their sources — plus a staleness check,
+  // because a bundle that was never regenerated after a migration change would
+  // otherwise sail through every migration-level assertion below while being
+  // the wrong file to paste.
   for (const name of ['fresh-install.sql', 'upgrade-hardening.sql']) {
     it(`parses supabase/apply/${name}`, async () => {
       const sql = readFileSync(join(APPLY_DIR, name), 'utf8');
@@ -296,6 +317,17 @@ describe('the generated bundles are valid SQL too', () => {
         unscopedPolicies(policies).map(describePolicy),
         `${name} carries a policy with no TO clause`
       ).toEqual([]);
+
+      const sources = bundleSources(sql);
+      expect(sources.length, `${name} records no source digests in its header`).toBeGreaterThan(0);
+
+      for (const source of sources) {
+        expect(
+          sourceDigest(source.name),
+          `${name} is STALE — it was generated from a different ${source.name}. ` +
+            `Run \`npm run build:apply-sql\` and commit the regenerated bundle.`
+        ).toBe(source.digest);
+      }
     });
   }
 });
