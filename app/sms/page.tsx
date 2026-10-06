@@ -206,12 +206,12 @@ export default function SMSPage() {
                 'Checking…'
               ) : gatewayStatus.philsmsConfigured ? (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-success" />
                   Configured
                 </>
               ) : (
                 <>
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-status-warning" />
                   Simulation mode
                 </>
               )}
@@ -329,8 +329,8 @@ export default function SMSPage() {
       >
         <form onSubmit={handleComposeSubmit} className="space-y-4 text-xs">
           {successNotice ? (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-bold flex items-center justify-center space-x-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            <div className="p-4 rounded-xl bg-status-success-bg border border-status-success/20 text-status-success text-center font-bold flex items-center justify-center space-x-2">
+              <CheckCircle2 className="w-5 h-5 text-status-success" />
               <span>SMS handed to the gateway — see the dispatch log for its honest status.</span>
             </div>
           ) : (

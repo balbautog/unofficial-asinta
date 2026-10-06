@@ -9,7 +9,7 @@
 
 import { escapeHtml, formatDatePH, formatPeso } from './format';
 
-export const EMAIL_TEMPLATE_TYPES = [
+const EMAIL_TEMPLATE_TYPES = [
   'initial_request',
   'upcoming_reminder',
   'due_today',
@@ -110,7 +110,7 @@ export function resolveClientGreetingName(
   return 'Valued Client';
 }
 
-export function buildPlaceholderValues(data: TemplateInvoiceData): Record<SupportedPlaceholder, string> {
+function buildPlaceholderValues(data: TemplateInvoiceData): Record<SupportedPlaceholder, string> {
   return {
     client_contact_name: resolveClientGreetingName(data.clientContactPerson, data.clientCompanyName),
     client_company_name: (data.clientCompanyName || '').trim() || 'Valued Client',
@@ -271,7 +271,7 @@ function isEmphasisLabel(label: string): boolean {
  * Builds the branded Asinta Architects HTML email. Content is derived from
  * the already-rendered plain-text body so both variants always match.
  */
-export function renderHtmlEmail(bodyText: string, data: TemplateInvoiceData): string {
+function renderHtmlEmail(bodyText: string, data: TemplateInvoiceData): string {
   const blocks = groupBodyIntoBlocks(bodyText);
   const heading = `${data.projectName} — ${data.invoiceNumber}`;
 

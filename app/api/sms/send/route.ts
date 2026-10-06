@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { requireFounder } from '@/lib/auth/serverRole';
-import { sendPhilSMS } from '@/lib/sms/philsms';
+import { deliverAndLogSMS } from '@/lib/sms/deliver';
 import { normalizePhilippineMobile } from '@/lib/sms/phone';
 
 export const runtime = 'nodejs';
@@ -81,59 +81,25 @@ export async function POST(req: NextRequest) {
 
     const recipientName = (client.contact_person || '').trim() || client.name;
 
-    // Record the attempt first, then update with the honest outcome.
-    const { data: pendingLog, error: insertError } = await supabase
-      .from('sms_logs')
-      .insert({
-        invoice_id: invoiceId,
-        recipient: recipientName,
-        phone: normalizedPhone,
-        message,
-        status: 'pending',
-        simulated: false,
-      })
-      .select('*')
-      .single();
-
-    if (insertError || !pendingLog) {
-      return NextResponse.json({ error: 'Failed to record the SMS log' }, { status: 500 });
-    }
-
-    const result = await sendPhilSMS({
+    // Shared delivery + honest logging (see lib/sms/deliver.ts).
+    const outcome = await deliverAndLogSMS({
+      db: supabase,
+      invoiceId,
       recipient: recipientName,
       phone: normalizedPhone,
       message,
     });
 
-    const update = result.success
-      ? {
-          status: 'sent',
-          simulated: false,
-          provider_status: result.providerStatus || 'success',
-          provider_message_id: result.messageId || null,
-          updated_at: new Date().toISOString(),
-        }
-      : {
-          status: 'failed',
-          simulated: Boolean(result.simulated),
-          provider_status: result.simulated ? 'simulation' : result.providerStatus || 'failed',
-          error_message: result.error || 'Unknown gateway failure',
-          updated_at: new Date().toISOString(),
-        };
-
-    const { data: finalLog } = await supabase
-      .from('sms_logs')
-      .update(update)
-      .eq('id', pendingLog.id)
-      .select('*')
-      .single();
+    if (outcome.logWriteFailed) {
+      return NextResponse.json({ error: outcome.error }, { status: 500 });
+    }
 
     return NextResponse.json({
-      success: result.success,
-      simulated: Boolean(result.simulated),
-      statusLabel: result.success ? (result.simulated ? 'Simulation mode' : 'Sent') : 'Failed',
-      error: result.success ? null : result.error || 'SMS dispatch failed',
-      log: finalLog || pendingLog,
+      success: outcome.success,
+      simulated: outcome.simulated,
+      statusLabel: outcome.statusLabel,
+      error: outcome.error,
+      log: outcome.log,
     });
   } catch {
     return NextResponse.json({ error: 'Failed to dispatch SMS' }, { status: 500 });

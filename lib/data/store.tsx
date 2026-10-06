@@ -68,11 +68,6 @@ interface DataStoreContextType {
   createExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Promise<Expense | null>;
   updateExpense: (id: string, data: Partial<Expense>) => Promise<Expense | null>;
   deleteExpense: (id: string) => Promise<boolean>;
-  confirmAIExpense: (
-    id: string,
-    finalCategory: ExpenseCategory,
-    isBale: boolean
-  ) => Promise<boolean>;
 
   // Bale / Advance Actions
   createAdvance: (
@@ -539,18 +534,6 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return false;
   };
 
-  const confirmAIExpense = async (
-    id: string,
-    finalCategory: ExpenseCategory,
-    _isBale: boolean
-  ): Promise<boolean> => {
-    const updated = await updateExpense(id, {
-      category: finalCategory,
-      ai_confirmed: true,
-    });
-    return Boolean(updated);
-  };
-
   // --- BALE / ADVANCES ACTIONS ---
   const createAdvance = async (
     data: Omit<Advance, 'id' | 'created_at' | 'amount_deducted' | 'status'>
@@ -970,7 +953,6 @@ export const DataStoreProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createExpense,
         updateExpense,
         deleteExpense,
-        confirmAIExpense,
         createAdvance,
         recordAdvanceDeduction,
         updateAdvanceStatus,

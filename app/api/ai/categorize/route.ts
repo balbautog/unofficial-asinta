@@ -35,13 +35,16 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { description, amount } = body;
+    const { description } = body;
 
     if (!description) {
       return NextResponse.json({ error: 'Description is required' }, { status: 400 });
     }
 
-    const result = await analyzeExpenseWithAI(description, Number(amount) || 0);
+    // The suggestion always comes back with its source ("llm" | "rules") and,
+    // when the model was unusable, a reason. The client shows that honestly
+    // instead of presenting rule output as AI output.
+    const result = await analyzeExpenseWithAI(String(description));
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json(

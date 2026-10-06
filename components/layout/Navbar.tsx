@@ -13,6 +13,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
+import { formatPesoCompact } from '@/lib/email/format';
 
 interface NavbarProps {
   onToggleMobileMenu?: () => void;
@@ -46,8 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileMenu }) => {
   const notificationCount =
     overdueInvoices.length + (activeBales.length > 0 ? 1 : 0) + (recentAttendance.length > 0 ? 1 : 0);
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatPHP = formatPesoCompact;
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-surface-border/80 shadow-[0_2px_10px_rgba(11,31,58,0.03)]">
@@ -93,7 +93,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileMenu }) => {
               onClick={() => setShowUserMenu(!showUserMenu)}
               className="flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-surface-inset border border-surface-border hover:border-navy/40 text-xs font-medium text-navy transition-all shadow-[inset_1px_1px_2px_rgba(11,31,58,0.04)]"
             >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-status-success animate-pulse" />
               <span className="hidden sm:inline font-semibold">{user?.name || 'User'}</span>
               <Badge variant={isFounder ? 'navy' : 'warning'} size="sm">
                 {isFounder ? 'Founder' : 'Supervisor'}
@@ -120,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleMobileMenu }) => {
                 <div className="pt-2">
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-medium text-status-danger hover:bg-rose-50 rounded-xl transition-colors"
+                    className="w-full flex items-center space-x-2 px-3 py-2 text-xs font-medium text-status-danger hover:bg-status-danger-bg rounded-xl transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign Out of Supabase Session</span>

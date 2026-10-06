@@ -1,0 +1,50 @@
+# Local Supabase stack configuration.
+#
+# The README documents `supabase start`, which requires this file — without it
+# the command had nothing to read and the documented local workflow did not
+# work. Run `supabase start` from the repository root.
+#
+# NOTE: duration-based session controls (auth.sessions timebox /
+# inactivity_timeout) are deliberately NOT set here yet — they are part of the
+# session-security work and will be added with the idle-warning dialog.
+
+project_id = "unofficial-asinta"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+# Matches the app's expectations: accounts are provisioned, not self-registered.
+# See supabase/migrations/20260913000002_bale_seed.sql for the demo accounts.
+enable_signup = true
+
+[auth.email]
+# Local development only — no real mail is sent; messages land in Inbucket.
+enable_confirmations = false
+
+[analytics]
+enabled = false

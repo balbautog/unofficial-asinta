@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { buildReminderSMS } from '@/lib/sms/templates';
+import { formatPesoCompact } from '@/lib/email/format';
 
 export default function FounderDashboard() {
   const {
@@ -40,9 +41,7 @@ export default function FounderDashboard() {
   const [smsSending, setSmsSending] = useState(false);
   const [smsSuccessMessage, setSmsSuccessMessage] = useState<string | null>(null);
 
-  const formatPHP = (amount: number) => {
-    return `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-  };
+  const formatPHP = formatPesoCompact;
 
   const handleOpenSMSModal = (inv: any) => {
     setSelectedInvoiceForSMS(inv);
@@ -163,9 +162,9 @@ export default function FounderDashboard() {
 
         {/* Overdue Invoices Alert Banner (if any) */}
         {metrics.totalOverdue > 0 && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-status-warning-bg border border-status-warning/25 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-start space-x-3.5">
-              <div className="p-2 rounded-xl bg-amber-100 text-amber-800 shrink-0">
+              <div className="p-2 rounded-xl bg-status-warning-bg text-status-warning shrink-0">
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
@@ -181,8 +180,8 @@ export default function FounderDashboard() {
               variant="secondary"
               size="sm"
               onClick={() => handleOpenSMSModal(invoices.find((i) => i.status === 'overdue'))}
-              leftIcon={<Send className="w-3.5 h-3.5 text-amber-700" />}
-              className="shrink-0 text-amber-900 border-amber-300 hover:bg-amber-100/50"
+              leftIcon={<Send className="w-3.5 h-3.5 text-status-warning" />}
+              className="shrink-0 text-status-warning border-status-warning/30 hover:bg-white/60"
             >
               Send SMS Reminder
             </Button>
@@ -236,7 +235,7 @@ export default function FounderDashboard() {
                       <div className="space-y-1">
                         <div className="flex justify-between text-[11px] text-ink-secondary font-medium">
                           <span>Progress Billed: {percentBilled}%</span>
-                          <span className="text-emerald-700 font-semibold">Margin: {proj.margin}%</span>
+                          <span className="text-status-success font-semibold">Margin: {proj.margin}%</span>
                         </div>
                         <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden flex">
                           <div
@@ -367,7 +366,7 @@ export default function FounderDashboard() {
                         <span>·</span>
                         <span>{exp.expense_date}</span>
                         {exp.ai_bale_detection && (
-                          <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold text-[10px]">
+                          <span className="px-1.5 py-0.2 bg-status-warning-bg text-status-warning rounded font-semibold text-[10px]">
                             Bale
                           </span>
                         )}
@@ -375,7 +374,7 @@ export default function FounderDashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-bold text-navy">{formatPHP(exp.amount)}</div>
-                      <div className="text-[10px] text-emerald-700 font-medium">Confirmed</div>
+                      <div className="text-[10px] text-status-success font-medium">Confirmed</div>
                     </div>
                   </div>
                 ))}
@@ -395,8 +394,8 @@ export default function FounderDashboard() {
         {selectedInvoiceForSMS && (
           <div className="space-y-4 text-xs">
             {smsSuccessMessage ? (
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-medium">
-                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-600" />
+              <div className="p-4 rounded-xl bg-status-success-bg border border-status-success/20 text-status-success text-center font-medium">
+                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-status-success" />
                 {smsSuccessMessage}
               </div>
             ) : (

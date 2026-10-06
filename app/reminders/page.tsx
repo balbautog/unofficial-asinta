@@ -19,6 +19,8 @@ import { createClient } from '@/lib/supabase/client';
 import { buildReminderSMS, estimateSMSSegments } from '@/lib/sms/templates';
 import { formatPeso, formatDatePH } from '@/lib/email/format';
 import {
+  REMINDER_LEAD_DAYS,
+  classifyReminderStage,
   daysBetween,
   getManilaClock,
   nextEligibleReminder,
@@ -45,13 +47,8 @@ const TYPE_VARIANTS: Record<ScheduledReminderType, 'info' | 'warning' | 'danger'
   follow_up: 'danger',
 };
 
-function queueReminderType(dueDate: string, todayIso: string): ScheduledReminderType {
-  const daysPastDue = daysBetween(dueDate, todayIso);
-  if (daysPastDue < 0) return 'upcoming';
-  if (daysPastDue === 0) return 'due_today';
-  if (daysPastDue <= 7) return 'overdue';
-  return 'follow_up';
-}
+// Stage boundaries now come from the scheduler so the queue label can never
+// disagree with the reminder cadence that actually fires.
 
 export default function RemindersPage() {
   const { invoices, clients, projects, smsLogs, sendSMS, updateInvoice } = useDataStore();
@@ -96,7 +93,7 @@ export default function RemindersPage() {
       if (inv.amount - inv.amount_paid <= 0) return false;
       if (dismissed.has(inv.id)) return false;
       if (isPaused(inv)) return false;
-      return daysBetween(inv.due_date, todayIso) >= -3;
+      return daysBetween(inv.due_date, todayIso) >= -REMINDER_LEAD_DAYS;
     })
     .sort((a, b) => (a.due_date < b.due_date ? -1 : 1));
 
@@ -244,7 +241,7 @@ export default function RemindersPage() {
             const client = clients.find((c) => c.id === inv.client_id);
             const project = projects.find((p) => p.id === inv.project_id);
             const balance = inv.amount - inv.amount_paid;
-            const type = queueReminderType(inv.due_date, todayIso);
+            const type = classifyReminderStage(inv.due_date, todayIso);
             const preview = buildMessageFor(inv);
             const estimate = estimateSMSSegments(preview);
             const next = nextEligibleReminder(inv.due_date, todayIso);
@@ -401,8 +398,8 @@ export default function RemindersPage() {
         {editInvoice && (
           <div className="space-y-4 text-xs">
             {sentNotice ? (
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-center font-bold flex items-center justify-center space-x-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <div className="p-4 rounded-xl bg-status-success-bg border border-status-success/20 text-status-success text-center font-bold flex items-center justify-center space-x-2">
+                <CheckCircle2 className="w-5 h-5 text-status-success" />
                 <span>Reminder handed to the gateway — check the SMS log for its status.</span>
               </div>
             ) : (

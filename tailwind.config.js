@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: ["class"],
+  // NOTE: `darkMode: ["class"]` was removed here. It was never implemented —
+  // there are zero `dark:` utilities in the codebase — so it advertised a
+  // theme that did not exist. Re-add it together with real dark styling.
   content: [
     './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
@@ -32,10 +34,16 @@ module.exports = {
           border: '#DDE3EA',
           borderHover: '#C6D0DC',
         },
+        // Contrast-corrected to meet WCAG AA (4.5:1) on white, surface
+        // (#EEF2F7) and inset (#E4EAF2) backgrounds:
+        //   secondary #4E5A6B → 7.00 / 6.23 / 5.79
+        //   muted     #5A6474 → 5.98 / 5.32 / 4.94
+        // The previous muted (#8F9AA8) measured 2.85:1 on white and was used
+        // 60+ times, often on 10–11px text.
         ink: {
           primary: '#172033',
-          secondary: '#667085',
-          muted: '#8F9AA8',
+          secondary: '#4E5A6B',
+          muted: '#5A6474',
           inverted: '#FFFFFF',
         },
         status: {

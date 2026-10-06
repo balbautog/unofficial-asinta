@@ -39,7 +39,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           highlight
             ? 'border-navy/30 bg-gradient-to-br from-white to-slate-50/70 shadow-[7px_7px_20px_rgba(11,31,58,0.08),-7px_-7px_20px_rgba(255,255,255,0.95)]'
             : alert
-            ? 'border-rose-200 bg-rose-50/20 shadow-[6px_6px_18px_rgba(197,40,40,0.06),-6px_-6px_18px_rgba(255,255,255,0.95)]'
+            ? 'border-status-danger/20 bg-status-danger-bg/20 shadow-[6px_6px_18px_rgba(197,40,40,0.06),-6px_-6px_18px_rgba(255,255,255,0.95)]'
             : 'border-surface-border/70 shadow-[6px_6px_18px_rgba(11,31,58,0.06),-6px_-6px_18px_rgba(255,255,255,0.95)]',
           onClick && 'cursor-pointer hover:shadow-[8px_8px_22px_rgba(11,31,58,0.10),-8px_-8px_22px_rgba(255,255,255,1)] hover:-translate-y-0.5',
           className
@@ -55,7 +55,7 @@ export const StatCard: React.FC<StatCardProps> = ({
             className={clsx(
               'p-2 rounded-xl text-navy',
               alert
-                ? 'bg-rose-100/60 text-rose-700'
+                ? 'bg-status-danger-bg/60 text-status-danger'
                 : 'bg-surface-inset text-navy shadow-[inset_1px_1px_3px_rgba(11,31,58,0.06)]'
             )}
           >
@@ -75,8 +75,8 @@ export const StatCard: React.FC<StatCardProps> = ({
                 className={clsx(
                   'font-semibold px-1.5 py-0.5 rounded-md text-[11px]',
                   trend.isPositive
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    ? 'bg-status-success-bg text-status-success border border-status-success/20'
+                    : 'bg-status-danger-bg text-status-danger border border-status-danger/20'
                 )}
               >
                 {trend.value}

@@ -6,7 +6,9 @@ import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { useAuth } from '@/lib/auth/authContext';
 import { useDataStore } from '@/lib/data/store';
-import { ShieldAlert, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { SkeletonShell } from '@/components/ui/Skeleton';
+import { ShieldAlert, Loader2, AlertTriangle, RefreshCw, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 
@@ -33,7 +35,32 @@ const SyncState: React.FC<{ title: string; subtitle: string }> = ({ title, subti
 export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = false }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, isFounder, isLoading: authLoading } = useAuth();
-  const { isLoaded, isLoading: dataLoading, loadError, refresh } = useDataStore();
+  const { isLoaded, loadError, refresh } = useDataStore();
+
+  // 0. Fail fast and say exactly what is wrong when the environment is not
+  //    configured, instead of surfacing a vague network error later.
+  if (!isSupabaseConfigured()) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col">
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-surface-border shadow-xl text-center space-y-4">
+            <div className="w-14 h-14 bg-status-warning-bg text-status-warning rounded-2xl flex items-center justify-center mx-auto border border-status-warning/20">
+              <Settings2 className="w-7 h-7" />
+            </div>
+            <h2 className="text-xl font-bold text-navy">Supabase environment variables are missing</h2>
+            <p className="text-xs text-ink-secondary leading-relaxed text-left">
+              BALE connects directly to Supabase and has no offline mode. Set
+              <span className="font-mono text-navy"> NEXT_PUBLIC_SUPABASE_URL </span>
+              and
+              <span className="font-mono text-navy"> NEXT_PUBLIC_SUPABASE_ANON_KEY </span>
+              in your environment (see <span className="font-mono text-navy">.env.example</span>),
+              then rebuild or redeploy.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 1. Wait until the Supabase session has been resolved.
   if (authLoading) {
@@ -52,7 +79,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
         <div className="min-h-screen bg-surface flex flex-col">
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-surface-border shadow-xl text-center space-y-4">
-              <div className="w-14 h-14 bg-amber-50 text-status-warning rounded-2xl flex items-center justify-center mx-auto border border-amber-200">
+              <div className="w-14 h-14 bg-status-warning-bg text-status-warning rounded-2xl flex items-center justify-center mx-auto border border-status-warning/20">
                 <AlertTriangle className="w-7 h-7" />
               </div>
               <h2 className="text-xl font-bold text-navy">Supabase Connection Problem</h2>
@@ -71,16 +98,9 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
       );
     }
 
-    return (
-      <SyncState
-        title="Synchronizing BALE ledger…"
-        subtitle={
-          dataLoading
-            ? 'Fetching live projects, invoices, expenses, attendance, and bale records from Supabase.'
-            : 'Preparing your workspace.'
-        }
-      />
-    );
+    // A skeleton keeps the page's shape while the ledger loads, instead of a
+    // spinner that collapses into content and shifts everything on arrival.
+    return <SkeletonShell />;
   }
 
   // 3. If page strictly requires Founder role and user is Supervisor, show
@@ -91,7 +111,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
         <Navbar onToggleMobileMenu={() => setIsMobileMenuOpen(true)} />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-surface-border shadow-xl text-center space-y-4">
-            <div className="w-14 h-14 bg-rose-50 text-status-danger rounded-2xl flex items-center justify-center mx-auto border border-rose-200">
+            <div className="w-14 h-14 bg-status-danger-bg text-status-danger rounded-2xl flex items-center justify-center mx-auto border border-status-danger/20">
               <ShieldAlert className="w-7 h-7" />
             </div>
             <h2 className="text-xl font-bold text-navy">Restricted Business Portal</h2>
@@ -119,7 +139,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children, requireFounder = f
 
       {loadError && (
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3">
+          <div className="p-3 rounded-2xl bg-status-warning-bg border border-status-warning/20 text-status-warning text-xs flex items-center justify-between gap-3">
             <span className="flex items-center gap-2 font-semibold">
               <AlertTriangle className="w-4 h-4 shrink-0" />
               Some Supabase queries failed: {loadError}

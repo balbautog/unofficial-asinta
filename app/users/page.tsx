@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { EmptyState } from '@/components/ui/EmptyState';
 
 export default function UsersPage() {
   const { users, projects, projectSupervisors } = useDataStore();
@@ -102,7 +103,7 @@ export default function UsersPage() {
                       {u.role === 'founder' ? (
                         <Compass className="w-6 h-6 text-navy" />
                       ) : (
-                        <HardHat className="w-6 h-6 text-amber-700" />
+                        <HardHat className="w-6 h-6 text-status-warning" />
                       )}
                     </div>
                     <div>
@@ -161,6 +162,19 @@ export default function UsersPage() {
               </div>
             );
           })}
+
+          {filteredUsers.length === 0 && (
+            <div className="bg-white rounded-3xl border border-surface-border">
+              <EmptyState
+                title="No accounts to show"
+                description={
+                  users.length === 0
+                    ? 'No BALE accounts exist yet. Provision users through Supabase Auth and public.users.'
+                    : 'No account matches the current search.'
+                }
+              />
+            </div>
+          )}
         </div>
       </div>
     </AppShell>

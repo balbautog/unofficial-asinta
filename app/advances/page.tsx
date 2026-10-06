@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Modal } from '@/components/ui/Modal';
+import { formatPesoCompact } from '@/lib/email/format';
 
 export default function AdvancesPage() {
   const {
@@ -42,8 +43,7 @@ export default function AdvancesPage() {
     date: new Date().toISOString().split('T')[0],
   });
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatPHP = formatPesoCompact;
 
   const filteredAdvances = advances.filter((adv) => {
     const worker = workers.find((w) => w.id === adv.worker_id);
@@ -143,10 +143,10 @@ export default function AdvancesPage() {
 
           <div className="p-5 rounded-3xl bg-white border border-surface-border shadow-sm">
             <div className="text-xs font-semibold text-ink-secondary uppercase">Total Repaid to Date</div>
-            <div className="text-2xl font-bold text-emerald-800 mt-1">
+            <div className="text-2xl font-bold text-status-success mt-1">
               {formatPHP(advances.reduce((sum, a) => sum + Number(a.amount_deducted || 0), 0))}
             </div>
-            <div className="text-[11px] text-emerald-700 mt-0.5">Recovered via payroll deductions</div>
+            <div className="text-[11px] text-status-success mt-0.5">Recovered via payroll deductions</div>
           </div>
         </div>
 
@@ -221,14 +221,14 @@ export default function AdvancesPage() {
 
                     <div>
                       <div className="text-ink-secondary">Deducted</div>
-                      <div className="font-semibold text-emerald-800 text-sm mt-0.5">
+                      <div className="font-semibold text-status-success text-sm mt-0.5">
                         {formatPHP(adv.amount_deducted)}
                       </div>
                     </div>
 
                     <div>
                       <div className="text-ink-secondary">Remaining Balance</div>
-                      <div className={`font-bold text-sm mt-0.5 ${balance > 0 ? 'text-amber-800' : 'text-slate-400'}`}>
+                      <div className={`font-bold text-sm mt-0.5 ${balance > 0 ? 'text-status-warning' : 'text-slate-400'}`}>
                         {formatPHP(balance)}
                       </div>
                     </div>
@@ -355,7 +355,7 @@ export default function AdvancesPage() {
               <div className="text-ink-secondary">
                 Original Advance: {formatPHP(selectedAdvance.amount)}
               </div>
-              <div className="font-semibold text-amber-800">
+              <div className="font-semibold text-status-warning">
                 Outstanding Balance: {formatPHP(selectedAdvance.amount - selectedAdvance.amount_deducted)}
               </div>
             </div>

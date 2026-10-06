@@ -21,9 +21,11 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ProjectStatus } from '@/types';
+import { formatPesoCompact } from '@/lib/email/format';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -60,6 +62,7 @@ export default function ProjectDetailPage() {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'expenses' | 'tools' | 'attendance'>('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: project?.name || '',
     location: project?.location || '',
@@ -82,8 +85,7 @@ export default function ProjectDetailPage() {
     );
   }
 
-  const formatPHP = (amount: number) =>
-    `₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const formatPHP = formatPesoCompact;
 
   const totalInvoiced = projInvoices.reduce((sum, i) => sum + Number(i.amount || 0), 0);
   const totalCollected = projInvoices.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
@@ -105,12 +107,15 @@ export default function ProjectDetailPage() {
     }
   };
 
-  const handleDelete = async () => {
-    if (confirm(`Are you sure you want to remove ${project.name}?`)) {
-      const success = await deleteProject(id);
-      if (success) {
-        router.push('/projects');
-      }
+  const handleDelete = () => {
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleteDialogOpen(false);
+    const success = await deleteProject(id);
+    if (success) {
+      router.push('/projects');
     }
   };
 
@@ -170,7 +175,7 @@ export default function ProjectDetailPage() {
                 >
                   Edit Project
                 </Button>
-                <Button variant="outline" size="sm" onClick={handleDelete} className="text-rose-700 hover:bg-rose-50">
+                <Button variant="outline" size="sm" onClick={handleDelete} className="text-status-danger hover:bg-status-danger-bg">
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
@@ -216,7 +221,7 @@ export default function ProjectDetailPage() {
                 <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
                   <div className="text-xs font-semibold text-ink-secondary uppercase">Progress Invoiced</div>
                   <div className="text-xl font-bold text-navy mt-1">{formatPHP(totalInvoiced)}</div>
-                  <div className="text-[11px] text-emerald-700 mt-0.5">{formatPHP(totalCollected)} Collected</div>
+                  <div className="text-[11px] text-status-success mt-0.5">{formatPHP(totalCollected)} Collected</div>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
@@ -227,7 +232,7 @@ export default function ProjectDetailPage() {
 
                 <div className="p-4 rounded-2xl bg-white border border-surface-border shadow-sm">
                   <div className="text-xs font-semibold text-ink-secondary uppercase">Net Collected Margin</div>
-                  <div className="text-xl font-bold text-emerald-800 mt-1">
+                  <div className="text-xl font-bold text-status-success mt-1">
                     {formatPHP(Math.max(0, totalCollected - totalExpenses))}
                   </div>
                   <div className="text-[11px] text-ink-secondary mt-0.5">Realized cash margin</div>
@@ -338,7 +343,7 @@ export default function ProjectDetailPage() {
                       <div className="flex items-center space-x-4 text-right">
                         <div>
                           <div className="text-sm font-bold text-navy">{formatPHP(inv.amount)}</div>
-                          <div className="text-xs text-emerald-800 font-medium">
+                          <div className="text-xs text-status-success font-medium">
                             Paid: {formatPHP(inv.amount_paid)}
                           </div>
                         </div>
@@ -568,6 +573,16 @@ export default function ProjectDetailPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        title="Delete project"
+        message={`Delete ${project.name}? This cannot be undone.`}
+        confirmLabel="Delete project"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setIsDeleteDialogOpen(false)}
+      />
     </AppShell>
   );
 }

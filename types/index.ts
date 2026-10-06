@@ -70,7 +70,10 @@ export interface Invoice {
   created_at: string;
 }
 
-export type ExpenseCategory = 'materials' | 'labor' | 'equipment' | 'permits' | 'transportation' | 'other';
+import type { ExpenseCategory } from '@/lib/ai/categories';
+
+// The category list lives in one place only — see lib/ai/categories.ts.
+export type { ExpenseCategory };
 
 export interface Expense {
   id: string;
